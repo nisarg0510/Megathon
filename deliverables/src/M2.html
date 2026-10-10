@@ -4,89 +4,92 @@ h1{font-size:13.5pt;margin:0 0 1px}h2{font-size:10.5pt;margin:7px 0 3px;border-b
 .team{font-size:11pt;font-weight:bold;text-align:right}p{margin:3px 0}ul{margin:2px 0 2px 16px;padding:0}li{margin:1px 0}
 table{border-collapse:collapse;font-size:8.4pt;margin:3px 0}td,th{border:1px solid #bbb;padding:1.5px 4px;text-align:right}
 th{background:#eee}td:first-child,th:first-child{text-align:left}.sub{color:#444;font-size:9pt}
-.row{display:flex;gap:10px;align-items:flex-start}.row>div{flex:1}.cap{font-size:8.2pt;color:#333;margin:1px 0 4px}b.hl{color:#000}
+.row{display:flex;gap:10px;align-items:flex-start;break-inside:avoid}table{break-inside:avoid}.row>div{flex:1}.cap{font-size:8.2pt;color:#333;margin:1px 0 4px}b.hl{color:#000}
 </style></head><body>
 <div class="team">Team Number: TEAM_NO</div>
 <h1>M2 — Automatic Category Suggestions for Wikimedia Commons</h1>
 <div class="sub">Problem Statement 3 · Progress report</div>
 
 <h2>1. Current approach and changes since M1</h2>
-<p>The M1 architecture is fully implemented and unchanged: a frozen CLIP ViT-B/32 encoder; four scorers (k-NN voting over categorised images, zero-shot category-name prototypes, a text-initialised multi-label head trained with asymmetric loss, and a metadata scorer using title/description embedding, word overlap and year agreement); logistic-regression fusion over the union of candidates; hierarchy post-processing; live index updates from editor feedback and new categories. Working end to end: Commons crawler, training, evaluation harness, command-line predictor, and a web demo with evidence images and accept/reject feedback. Changes since M1:</p>
+<p>The M1 architecture is fully implemented and unchanged: a frozen CLIP ViT-B/32 encoder; four scorers (k-NN voting over categorised images, zero-shot category-name prototypes, a text-initialised multi-label head trained with asymmetric loss, and a metadata scorer using title/description embedding, word overlap and year agreement); logistic-regression fusion over the union of candidates; hierarchy post-processing; live index updates from editor feedback and new categories. Working end to end: Commons crawler, training, evaluation harness, command-line predictor, and a web demo with evidence images and accept/reject feedback. Changes since M1, each driven by an experiment below:</p>
 <ul>
-<li><b>Hierarchy strength tuned on validation</b> instead of fixed by hand (1.0 = suppression off), after Run 1 showed a fixed penalty lowered strict F1@5.</li>
-<li><b>Larger crawl</b> (more files per category and subcategory) and a fix for a crawler edge case in the Commons API response.</li>
-<li><b>Portable search:</b> exact NumPy search on macOS, where FAISS and PyTorch can deadlock (both bundle OpenMP); FAISS (flat/HNSW/IVF-PQ) elsewhere.</li></ul>
+<li><b>Realistic validation.</b> The vocabulary is now built only from data that precedes the validation period; validation categories are added after fusion is fitted. Before, every validation label was “known”, so fusion was tuned on an easy set (val F1@5 0.307 vs test 0.172). Now val 0.167 vs test 0.153.</li>
+<li><b>Hierarchy strength tuned on validation</b> (1.0 = off) instead of fixed by hand; on realistic validation it selects 1.0, so suppression no longer costs accuracy.</li>
+<li><b>Less biased sampling and a bias audit:</b> region-balanced seeds (8 countries per continent), optional uniformly random Commons files, and accuracy reported per region and topic group.</li>
+<li><b>Engineering:</b> exact NumPy search on macOS (FAISS and PyTorch can deadlock there); a crawler fix for an API edge case.</li></ul>
 
 <h2>2. Experiments and results</h2>
-<p><b>Setup.</b> Commons files crawled through the MediaWiki API from 107 seed categories (objects, scenes, events, abstract concepts; 12 countries in Asia, Africa and Latin America) and their subcategories. Labels are editor-assigned categories after removing hidden and maintenance categories. Temporal split by upload time; no near-duplicates found between splits (perceptual hash + embedding cosine ≥ 0.95). Run 1: 1,279 files (898/191/190). <b>Run 2: 3,416 files (2,400 train / 506 val / 510 test)</b>, vocabulary 11,821 categories, 415 with ≥ 3 training images in the supervised head; k-NN tuned on validation to K = 100, τ = 0.02.</p>
+<p><b>Data.</b> Commons files crawled through the MediaWiki API; labels are editor-assigned categories after removing hidden and maintenance categories; temporal split by upload time (old → train, newest → test) with near-duplicate removal (perceptual hash + embedding cosine ≥ 0.95). Run 1: 1,279 files from 107 topical seeds. Run 2: 3,416 files, more per category. <b>Run 3: 6,303 files</b> (4,429 train / 937 val / 937 test) from 155 seeds (107 topical + 48 region-balanced) plus 1,500 uniformly random files, with realistic validation; vocabulary 24,486 categories, 466 in the supervised head; k-NN tuned to K = 50, τ = 0.1.</p>
 <div class="row"><div>
-<div class="cap"><b>Table 1.</b> Scaling the data (test set, image + metadata).</div>
-<table><tr><th>metric</th><th>Run 1</th><th>Run 2</th></tr>
-<tr><td>F1@5</td><td>0.119</td><td><b>0.160</b></td></tr>
-<tr><td>P@1</td><td>0.284</td><td><b>0.339</b></td></tr>
-<tr><td>R@10</td><td>0.238</td><td><b>0.310</b></td></tr>
-<tr><td>hierarchy-aware P@1</td><td>0.384</td><td><b>0.482</b></td></tr>
-<tr><td>F1@5, image only</td><td>0.089</td><td><b>0.112</b></td></tr>
-<tr><td>label coverage</td><td>0.335</td><td>0.377</td></tr>
-<tr><td>mAP (macro)</td><td>0.174</td><td>0.142</td></tr>
-<tr><td>test categories</td><td>288</td><td>622</td></tr></table>
-<div class="cap"><b>Table 2.</b> Run 2, fusion + hierarchy (sample-wise).</div>
+<div class="cap"><b>Table 1.</b> Runs compared (test, image + metadata).</div>
+<table><tr><th>metric</th><th>Run 1</th><th>Run 2</th><th>Run 3</th></tr>
+<tr><td>test images</td><td>190</td><td>510</td><td>937</td></tr>
+<tr><td>P@1</td><td>0.284</td><td>0.339</td><td><b>0.350</b></td></tr>
+<tr><td>F1@1</td><td>0.148</td><td>0.199</td><td><b>0.237</b></td></tr>
+<tr><td>F1@5</td><td>0.119</td><td><b>0.160</b></td><td>0.153</td></tr>
+<tr><td>R@10</td><td>0.238</td><td>0.310</td><td><b>0.330</b></td></tr>
+<tr><td>F1@5, image only</td><td>0.089</td><td><b>0.112</b></td><td>0.084</td></tr>
+<tr><td>label coverage</td><td>0.335</td><td>0.377</td><td>0.362</td></tr>
+<tr><td>val − test F1@5 gap</td><td>–</td><td>0.135</td><td><b>0.014</b></td></tr></table>
+<div class="cap"><b>Table 2.</b> Run 3, fusion (sample-wise).</div>
 <table><tr><th>input</th><th>k</th><th>P@k</th><th>R@k</th><th>F1@k</th><th>hier. P</th></tr>
-<tr><td>image + metadata</td><td>1</td><td>0.339</td><td>0.159</td><td>0.199</td><td>0.482</td></tr>
-<tr><td>image + metadata</td><td>5</td><td>0.129</td><td>0.278</td><td>0.160</td><td>0.295</td></tr>
-<tr><td>image + metadata</td><td>10</td><td>0.074</td><td>0.310</td><td>0.111</td><td>0.239</td></tr>
-<tr><td>image only</td><td>1</td><td>0.212</td><td>0.112</td><td>0.135</td><td>0.341</td></tr>
-<tr><td>image only</td><td>5</td><td>0.086</td><td>0.220</td><td>0.112</td><td>0.198</td></tr>
-<tr><td>image only</td><td>10</td><td>0.053</td><td>0.254</td><td>0.081</td><td>0.146</td></tr></table>
+<tr><td>image + metadata</td><td>1</td><td>0.350</td><td>0.203</td><td>0.237</td><td>0.425</td></tr>
+<tr><td>image + metadata</td><td>5</td><td>0.116</td><td>0.304</td><td>0.153</td><td>0.240</td></tr>
+<tr><td>image + metadata</td><td>10</td><td>0.066</td><td>0.330</td><td>0.103</td><td>0.174</td></tr>
+<tr><td>image only</td><td>1</td><td>0.175</td><td>0.093</td><td>0.112</td><td>0.232</td></tr>
+<tr><td>image only</td><td>5</td><td>0.064</td><td>0.163</td><td>0.084</td><td>0.119</td></tr></table>
 </div><div>
-<div class="cap"><b>Table 3.</b> Run 2 ablation, image + metadata.</div>
+<div class="cap"><b>Table 3.</b> Run 3 ablation, image + metadata.</div>
 <table><tr><th>ranking</th><th>F1@5</th><th>R@10</th></tr>
-<tr><td>fusion (no hierarchy)</td><td><b>0.172</b></td><td><b>0.324</b></td></tr>
-<tr><td>fusion + hierarchy</td><td>0.160</td><td>0.310</td></tr>
-<tr><td>k-NN only</td><td>0.114</td><td>0.234</td></tr>
-<tr><td>metadata lexical only</td><td>0.098</td><td>0.172</td></tr>
-<tr><td>supervised head only</td><td>0.092</td><td>0.213</td></tr>
-<tr><td>metadata text only</td><td>0.039</td><td>0.117</td></tr>
-<tr><td>zero-shot only</td><td>0.016</td><td>0.076</td></tr></table>
-<div class="cap"><b>Table 4.</b> Run 2 recall@5 by category frequency in the index.</div>
+<tr><td>fusion (all scorers)</td><td><b>0.153</b></td><td><b>0.330</b></td></tr>
+<tr><td>metadata lexical only</td><td>0.100</td><td>0.203</td></tr>
+<tr><td>supervised head only</td><td>0.070</td><td>0.173</td></tr>
+<tr><td>k-NN only</td><td>0.069</td><td>0.156</td></tr>
+<tr><td>metadata text only</td><td>0.052</td><td>0.170</td></tr>
+<tr><td>zero-shot only</td><td>0.005</td><td>0.020</td></tr></table>
+<div class="cap"><b>Table 4.</b> Run 3 recall@5 by frequency in the index.</div>
 <table><tr><th>bucket</th><th>categories</th><th>labels</th><th>macro R</th></tr>
-<tr><td>unseen (0)</td><td>508</td><td>1,309</td><td>0.009</td></tr>
-<tr><td>tail (1–4)</td><td>44</td><td>84</td><td>0.333</td></tr>
-<tr><td>torso (5–19)</td><td>23</td><td>213</td><td>0.457</td></tr>
-<tr><td>head (20+)</td><td>47</td><td>222</td><td>0.758</td></tr></table>
+<tr><td>unseen (0)</td><td>753</td><td>2,412</td><td>0.004</td></tr>
+<tr><td>tail (1–4)</td><td>71</td><td>318</td><td>0.214</td></tr>
+<tr><td>torso (5–19)</td><td>24</td><td>217</td><td>0.434</td></tr>
+<tr><td>head (20+)</td><td>72</td><td>380</td><td>0.830</td></tr></table>
 </div></div>
 <div class="row"><div>
-<div class="cap"><b>Table 5.</b> Run 2 by category type (k = 5).</div>
-<table><tr><th>type</th><th>labels</th><th>recall</th><th>precision</th></tr>
-<tr><td>object</td><td>1,298</td><td>0.182</td><td>0.145</td></tr>
-<tr><td>scene</td><td>338</td><td>0.210</td><td>0.149</td></tr>
-<tr><td>event</td><td>55</td><td>0.273</td><td>0.080</td></tr>
-<tr><td>abstract</td><td>137</td><td>0.051</td><td>0.028</td></tr></table>
+<div class="cap"><b>Table 5.</b> Run 3 bias audit (groups with ≥ 10 test images).</div>
+<table><tr><th>group</th><th>images</th><th>F1@5</th><th>R@10</th><th>F1@5 image only</th></tr>
+<tr><td>Objects</td><td>318</td><td>0.192</td><td>0.408</td><td>0.140</td></tr>
+<tr><td>Scenes</td><td>109</td><td>0.232</td><td>0.422</td><td>0.162</td></tr>
+<tr><td>Events</td><td>20</td><td>0.233</td><td>0.434</td><td>0.200</td></tr>
+<tr><td>Abstract concepts</td><td>127</td><td>0.050</td><td>0.085</td><td>0.029</td></tr>
+<tr><td>Europe</td><td>42</td><td>0.278</td><td>0.735</td><td>0.037</td></tr>
+<tr><td>Africa</td><td>71</td><td>0.204</td><td>0.597</td><td>0.009</td></tr>
+<tr><td>South America</td><td>48</td><td>0.103</td><td>0.239</td><td>0.009</td></tr>
+<tr><td>Asia</td><td>47</td><td>0.087</td><td>0.162</td><td>0.038</td></tr>
+<tr><td>N. America &amp; Caribbean</td><td>43</td><td>0.032</td><td>0.065</td><td>0.012</td></tr></table>
 </div><div>
-<div class="cap"><b>Table 6.</b> Run 2 robustness, F1@5 (share flagged low-quality).</div>
+<div class="cap"><b>Table 6.</b> Run 3 robustness, F1@5 (share flagged low-quality).</div>
 <table><tr><th>degradation</th><th>flagged</th><th>+ metadata</th><th>image only</th></tr>
-<tr><td>none</td><td>–</td><td>0.160</td><td>0.112</td></tr>
-<tr><td>Gaussian blur r=2</td><td>1.00</td><td>0.152</td><td>0.099</td></tr>
-<tr><td>Gaussian blur r=5</td><td>1.00</td><td>0.135</td><td>0.065</td></tr>
-<tr><td>JPEG quality 10</td><td>0.22</td><td>0.156</td><td>0.095</td></tr>
-<tr><td>downscale ×0.15</td><td>1.00</td><td>0.148</td><td>0.080</td></tr></table>
+<tr><td>none</td><td>–</td><td>0.153</td><td>0.084</td></tr>
+<tr><td>Gaussian blur r=2</td><td>1.00</td><td>0.155</td><td>0.079</td></tr>
+<tr><td>Gaussian blur r=5</td><td>1.00</td><td>0.147</td><td>0.054</td></tr>
+<tr><td>JPEG quality 10</td><td>0.35</td><td>0.151</td><td>0.072</td></tr>
+<tr><td>downscale ×0.15</td><td>1.00</td><td>0.151</td><td>0.066</td></tr></table>
+<div class="cap"><b>Efficiency</b> (team’s Mac, no server GPU): end-to-end per image p50 19.6 ms, p95 114.8 ms; scoring and ranking 0.89 ms/image; index of 5,366 images and 24,486 categories uses 58.3 MB in memory.</div>
 </div></div>
-<p class="cap"><b>Efficiency</b> (team’s Mac, no server GPU): end-to-end per image p50 18.7 ms, p95 63.9 ms; scoring and ranking 0.73 ms/image; index of 2,906 images and 11,821 categories uses 28.8 MB in memory. By original resolution, F1@5 is 0.168 (≥ 2000 px), 0.133 (800–2000 px) and 0.166 (&lt; 800 px).</p>
 
-<p><b>Findings.</b> (1) <b>More data helps across the board:</b> 2.7× more files raised F1@5 by 34% and P@1 from 0.284 to 0.339; mAP fell because the test set now spans 622 categories instead of 288, most of them new. (2) <b>Examples per category drive accuracy:</b> recall@5 is 0.758 for categories with ≥ 20 examples but 0.009 for unseen ones, and 72% of test labels belong to categories unseen in the index (62% are absent from the vocabulary entirely). This long tail of new categories is the central difficulty. (3) <b>Fusion works:</b> +51% F1@5 over the best single scorer (k-NN). (4) <b>Metadata matters:</b> +43% F1@5 over image only, and it halves the loss under heavy blur (−16% vs −42%). (5) <b>Strict metrics under-count:</b> hierarchy-aware P@1 is 0.482 vs strict 0.339. (6) <b>Weak spots:</b> zero-shot name matching alone is poor over 11.8k category names, and abstract concepts have the lowest recall.</p>
-<p><b>Diagnosed issue.</b> Validation F1@5 (0.307) is far above test (0.172) because the vocabulary is built from training <i>and</i> validation labels, so every validation label is “known”, while 62% of test labels are not. Fusion weights and the hierarchy penalty are therefore tuned on an unrealistically easy set; this also explains why hierarchy suppression still costs 0.012 F1@5 on test. Fix: build the vocabulary only from data that precedes the validation period, fit fusion, then add validation categories (Run 3, below).</p>
+<p><b>Findings.</b> (1) <b>Realistic validation fixed model selection:</b> the val–test gap fell from 0.135 to 0.014 F1@5, and the tuned hierarchy rule no longer hurts. (2) <b>More data improves the top of the list:</b> P@1 rose from 0.284 to 0.350 and R@10 from 0.238 to 0.330; F1@5 is flat on Run 3’s harder test set, whose region-balanced seeds add many place-specific categories. (3) <b>Examples per category drive accuracy:</b> recall@5 is 0.830 with ≥ 20 examples but 0.004 for unseen categories, which hold 72% of test labels; label coverage (0.36) is the main ceiling. (4) <b>Fusion</b> beats the best single scorer by 53% F1@5. (5) <b>Metadata is essential for places and regions:</b> with metadata, Africa reaches F1@5 0.204 (image only 0.009); under heavy blur, F1@5 with metadata falls only 4% vs 36% image only. (6) <b>Bias audit:</b> accuracy varies widely by region (Europe 0.278, North America 0.032) and abstract concepts are weakest (0.050); groups are small (42–318 images), so differences are indicative. (7) <b>Zero-shot name matching alone collapses</b> over 24k names (F1@5 0.005), and random files fell almost entirely into training because they span Commons’ whole history (≤ 8 of 937 test images).</p>
 
 <h2>3. Progress on testing</h2>
 <ul>
-<li>Evaluation harness complete with every metric planned in M1: P/R/F1@k, mAP, hierarchy-aware precision, frequency buckets, category types, resolution bands, synthetic degradations, latency and memory, plus per-scorer ablation.</li>
-<li>60 automated tests: category filtering, API edge cases, splits, metrics, index search (FAISS and NumPy), hierarchy rules, the head, fusion, an offline end-to-end run (train → evaluate → predict → update) on synthetic data, and encoder API checks on tiny CLIP and SigLIP models.</li>
+<li>Evaluation harness implements every metric planned in M1 (P/R/F1@k, mAP, hierarchy-aware precision, frequency buckets, category types, resolution bands, degradations, latency, memory, per-scorer ablation) plus the per-region bias audit.</li>
+<li>61 automated tests: category filtering, API edge cases, random sampling, splits, metrics, index search (FAISS and NumPy), hierarchy rules, head, fusion, an offline end-to-end run on synthetic data, and encoder API checks on tiny CLIP and SigLIP models.</li>
 <li>Continual learning verified: categories added at run time and accepted feedback are suggested immediately without retraining; rejected labels act as negative votes.</li></ul>
 
 <h2>4. Plan for the remaining time</h2>
 <ul>
-<li><b>Run 3:</b> realistic validation vocabulary (above), then re-fit fusion and the hierarchy penalty; retrain only, no re-crawl.</li>
-<li><b>Raise label coverage:</b> add category names without images (subtrees of the seeds, siblings of known categories) for the zero-shot and lexical scorers; track coverage and unseen-bucket recall.</li>
-<li><b>Encoder comparison:</b> SigLIP-base vs CLIP ViT-B/32 on the same split, to strengthen zero-shot matching; report the accuracy/latency trade-off.</li>
+<li><b>Unbiased test set of real new uploads:</b> sample the most recent Commons uploads directly, so the test set matches the target “new images” distribution.</li>
+<li><b>Encoder comparison:</b> SigLIP-base vs CLIP ViT-B/32 on the same split, aimed at the weak zero-shot scorer; report the accuracy/latency trade-off.</li>
+<li><b>Raise label coverage:</b> add category names without images (seed subtrees, siblings of known categories) for the zero-shot and lexical scorers.</li>
 <li><b>Reviewed score:</b> manually check a sample of “wrong” suggestions to estimate how many are correct but unlabelled.</li>
 <li><b>Deliverables:</b> demo video (web UI with evidence and live feedback), final report, slides, externally hosted index.</li></ul>
 </body></html>
