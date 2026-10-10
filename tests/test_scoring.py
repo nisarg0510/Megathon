@@ -181,6 +181,8 @@ def test_content_type_families():
 
     assert family_of("Diwali 2023 in India") == "Event" and family_of("Beaches in Goa") == "Scene"
     assert family_of("Abstract art") == "Abstract concept" and family_of("Bicycles") == "Object"
+    assert family_of("Churches in Paris") == "Scene" and family_of("Gothic architecture") == "Scene"
+    assert family_of("House sparrows") == "Object" and family_of("Backpacks") == "Object"
     enc = HashingEncoder()
     scorer = FamilyScorer(enc, vote_weight=1.0)
     img = l2_normalize(RNG.standard_normal(enc.dim))

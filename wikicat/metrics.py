@@ -110,11 +110,15 @@ _EVENT = re.compile(r"\b(1[5-9]\d\d|20\d\d)\b|festival|protest|demonstration|ele
                     r"visit|meeting|summit|exhibition|fair\b|race\b|cup\b|strike", re.IGNORECASE)
 _SCENE = re.compile(r"landscape|view|panorama|skyline|street|interior|beach|sunset|sunrise|night|forest|mountain|"
                     r"river|lake|park|garden|square|market|harbou?r|port\b|coast|valley|aerial|cityscape|rural|"
-                    r"village|town|city|desert|waterfall|field|sky|clouds|road|station|airport|campus",
+                    r"village|town|city|desert|waterfall|field|sky|clouds|road|station|airport|campus|"
+                    # buildings and landmarks are places (Scene), not movable objects
+                    r"church|cathedral|basilica|chapel|mosque|temple|synagogue|monaster|castle|palace|fort\b|"
+                    r"fortress|tower|bridge|lighthouse|skyscraper|building|\bhouses\b|monument|museum|stadium|"
+                    r"fa[cç]ade|architecture|landmark|ruins",
                     re.IGNORECASE)
 _ABSTRACT = re.compile(r"\bart\b|culture|religion|history|politic|science|economy|education|music|sport|"
                        r"technology|love|death|poverty|peace|freedom|emotion|symbol|pattern|colou?r|geometry|"
-                       r"light\b|shadow|reflection|abstract|concept|style|architecture|tradition|humou?r|"
+                       r"light\b|shadow|reflection|abstract|concept|style|tradition|humou?r|"
                        r"design|motion|silhouette|symmetry|minimalism|mythology|literature", re.IGNORECASE)
 
 

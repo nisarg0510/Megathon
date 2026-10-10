@@ -16,9 +16,9 @@ FAMILIES = ("Object", "Scene", "Event", "Abstract concept")
 _TYPE_TO_FAMILY = {"object": "Object", "scene": "Scene", "event": "Event", "abstract": "Abstract concept"}
 FAMILY_PROMPTS = {
     "Object": ["a photo of a single object", "a close-up photo of a bag, tool, device or other thing",
-               "a photo of an animal or a plant", "a photo of a vehicle, fence, wire, building or other structure"],
-    "Scene": ["a photo of a landscape", "a photo of a street, room or other place",
-              "a wide view of a city or of nature"],
+               "a photo of an animal or a plant", "a photo of a vehicle, fence, wire or other man-made object"],
+    "Scene": ["a photo of a landscape", "a photo of a street, square, room or other place",
+              "a wide view of a city or of nature", "a photo of a building, church, temple or famous landmark"],
     "Event": ["a photo of an event such as a festival, ceremony, parade or sports match",
               "a crowd of people at a celebration, race or protest"],
     "Abstract concept": ["an abstract painting or digital artwork", "a pattern or texture with no recognisable objects",
