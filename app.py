@@ -34,7 +34,7 @@ def run(image, title, description, top_k, use_hierarchy):
     others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
     if result["unsure"]:
         label = f"Unsure (best guess: {top['family']})"
-        others = f"top category only {result['confidence']:.0%} sure; other types: {others}"
+        others = f"content type only {result['type_confidence']:.0%} sure; other types: {others}"
     else:
         label = f"Content type: {top['family']}"
         others = f"other types: {others}"
@@ -54,8 +54,8 @@ def run(image, title, description, top_k, use_hierarchy):
     t = result["timing_ms"]
     info.append(f"\n*Encode {t['encode_image']} ms · score and rank {t['score_rank']} ms*")
     choices = [s["category"] for s in result["suggestions"]]
-    title = (f"Content type: UNSURE (top category only {result['confidence']:.0%} sure)" if result["unsure"]
-             else f"Content type (top category {result['confidence']:.0%} sure)")
+    title = (f"Content type: UNSURE (only {result['type_confidence']:.0%} sure)" if result["unsure"]
+             else f"Content type ({result['type_confidence']:.0%} sure)")
     content_type = gr.Label(value={f["family"]: f["score"] for f in result["content_type"]}, label=title)
     return content_type, rows, gallery[:12], "\n".join(info), gr.CheckboxGroup(choices=choices, value=[]), image
 
@@ -133,7 +133,7 @@ def main() -> None:
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
-                        help="Mark the image Unsure when the top score is below this (default 0.5)")
+                        help="Mark the image Unsure when the content-type score is below this (default 0.5)")
     args = parser.parse_args()
     ARTIFACTS = args.artifacts_dir
     SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,

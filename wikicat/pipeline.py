@@ -227,11 +227,16 @@ class CategorySuggester:
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
         t2 = time.perf_counter()
         notes = []
+        # "Unsure" follows the content type (the first row): Object / Scene / Event / Abstract concept.
         confidence = ranked[0]["score"] if ranked else 0.0
-        unsure = confidence < self.cfg.unsure_threshold
+        type_confidence = families[0]["score"] if families else 0.0
+        unsure = type_confidence < self.cfg.unsure_threshold
         if unsure:
-            notes.append(f"Unsure: the best category has {confidence:.0%} confidence, below the "
+            notes.append(f"Unsure: the content type is only {type_confidence:.0%} certain, below the "
                          f"{self.cfg.unsure_threshold:.0%} threshold. Treat the suggestions as guesses.")
+        elif confidence < self.cfg.unsure_threshold:
+            notes.append(f"The content type is clear, but the specific categories below are low-confidence "
+                         f"(best {confidence:.0%}). Adding a title usually helps.")
         if quality["low_quality"]:
             notes.append("Low-quality image (" + ", ".join(quality["flags"]) + "): visual scores are less reliable.")
         if not meta_text:
@@ -239,6 +244,7 @@ class CategorySuggester:
         return {
             "unsure": unsure,
             "confidence": round(confidence, 3),
+            "type_confidence": round(type_confidence, 3),
             "content_type": families,
             "suggestions": ranked,
             "quality": quality,
