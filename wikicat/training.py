@@ -1,12 +1,14 @@
 """Build every artifact from data/records.jsonl.
 
 1. Encode images (cached per model) and drop val/test near-duplicates of train.
-2. Vocabulary = train + val categories, seed categories and their parents.
+2. Vocabulary = train categories, seed categories and their parents. Val
+   categories are not added yet, so validation sees the same share of unknown
+   categories that test will (otherwise fusion is tuned on an easy set).
 3. Text prototypes, k-NN index over train, supervised head on train.
 4. Tune k-NN (K, tau) and fit the fusion stacker on val, with copies of val
    that have metadata removed or images degraded, so the stacker learns how
    to weigh signals in those conditions.
-5. Add val images to the index (they predate the test period) and save.
+5. Add val categories and val images (they predate the test period) and save.
 """
 from __future__ import annotations
 
@@ -277,7 +279,7 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
     graph = CategoryGraph.load(data_dir / "hierarchy.json")
     seeds_file = data_dir / "seeds.json"
     seeds = json.loads(seeds_file.read_text()) if seeds_file.exists() else []
-    vocab = build_vocabulary(cfg, records, tr, va, graph, seeds)
+    vocab = build_vocabulary(cfg, records, tr, [], graph, seeds)
     log.info("Vocabulary: %d categories", len(vocab))
 
     prototypes = PrototypeScorer(encoder.encode_categories(vocab.names), cfg.index_type)
@@ -319,6 +321,11 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
         log.info("Ancestor penalty tuned: %.1f", cfg.ancestor_penalty)
 
         if cfg.index_val_after_fusion:
+            val_cats = sorted({c for r in val_records for c in r["categories"]})
+            if cfg.vocab_include_parents:
+                val_cats += [p for c in val_cats for p in graph.parents.get(c, [])]
+            suggester.add_categories(val_cats)
+            report["vocabulary_after_val"] = len(suggester.vocab)
             suggester.add_images(embs[va], [r["categories"] for r in val_records],
                                  [item_meta(r) for r in val_records])
 

@@ -38,6 +38,8 @@ def main(argv=None) -> dict:
     cfg = Config().update(**{k: v for k, v in vars(args).items()})
     report = train(cfg)
     summary = {k: report[k] for k in ("model", "counts", "vocabulary", "head_categories", "seconds")}
+    if "vocabulary_after_val" in report:
+        summary["vocabulary_after_val"] = report["vocabulary_after_val"]
     if "knn_tuning" in report:
         summary["knn_best"] = report["knn_tuning"]["best"]
     if "fusion" in report:
