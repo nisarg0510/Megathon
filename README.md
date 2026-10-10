@@ -1,4 +1,4 @@
-# Wikimedia Commons Category Suggestions
+# CommonLens — Category Suggestions for Wikimedia Commons
 
 ## Requirements
 

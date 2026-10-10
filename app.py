@@ -72,8 +72,8 @@ def add_category(text):
 
 
 def build_ui() -> gr.Blocks:
-    with gr.Blocks(title="Commons category suggestions") as demo:
-        gr.Markdown("## Category suggestions for Wikimedia Commons\nSuggestions are for human review, "
+    with gr.Blocks(title="CommonLens") as demo:
+        gr.Markdown("## CommonLens — category suggestions for Wikimedia Commons\nSuggestions are for human review, "
                     "with the similar indexed images that support each one.")
         with gr.Row():
             with gr.Column(scale=1):
