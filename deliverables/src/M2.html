@@ -1,0 +1,79 @@
+<!doctype html><html><head><meta charset="utf-8"><title>M2</title><style>
+@page{size:A4;margin:13mm 14mm}body{font-family:"DejaVu Serif",Georgia,serif;font-size:9.2pt;line-height:1.3;color:#111}
+h1{font-size:13.5pt;margin:0 0 1px}h2{font-size:10.5pt;margin:7px 0 3px;border-bottom:1px solid #999}
+.team{font-size:11pt;font-weight:bold;text-align:right}p{margin:3px 0}ul{margin:2px 0 2px 16px;padding:0}li{margin:1px 0}
+table{border-collapse:collapse;font-size:8.4pt;margin:3px 0}td,th{border:1px solid #bbb;padding:1.5px 4px;text-align:right}
+th{background:#eee}td:first-child,th:first-child{text-align:left}.sub{color:#444;font-size:9pt}
+.row{display:flex;gap:10px;align-items:flex-start}.row>div{flex:1}.cap{font-size:8.2pt;color:#333;margin:1px 0 4px}b.hl{color:#000}
+</style></head><body>
+<div class="team">Team Number: TEAM_NO</div>
+<h1>M2 — Automatic Category Suggestions for Wikimedia Commons</h1>
+<div class="sub">Problem Statement 3 · Progress report</div>
+
+<h2>1. Current approach and changes since M1</h2>
+<p>The architecture is unchanged from M1 and fully implemented: a frozen CLIP ViT-B/32 encoder; four scorers (k-NN voting over categorised images, zero-shot category-name prototypes, a text-initialised multi-label head trained with asymmetric loss, and a metadata scorer using title/description embedding, word overlap and year agreement); logistic-regression fusion over the union of candidates; hierarchy post-processing; live index updates from editor feedback and new categories. Working: data crawler, training, evaluation harness, command-line predictor, and a web demo showing evidence images and accept/reject feedback. Changes since M1:</p>
+<ul>
+<li><b>Hierarchy strength tuned on validation.</b> With a hand-set penalty, ancestor suppression lowered strict F1@5 (0.127 → 0.119) because some files <i>are</i> labelled with broad categories. The penalty is now chosen on the validation split (1.0 = off), so the rule is applied only as strongly as it helps.</li>
+<li><b>Portable search backend.</b> On macOS, FAISS and PyTorch can deadlock (both bundle OpenMP); exact NumPy search is now the default there, with FAISS (flat/HNSW/IVF-PQ) used on Linux and at scale.</li></ul>
+
+<h2>2. Experiments and results</h2>
+<p><b>Run 1 setup.</b> 1,279 Commons files crawled through the MediaWiki API from 107 seed categories (objects, scenes, events, abstract concepts; 12 countries across Asia, Africa and Latin America) and their subcategories. Labels are the files' editor-assigned categories after removing hidden and maintenance categories. Temporal split by upload time: 898 train / 191 validation / 190 test; 0 near-duplicates found (perceptual hash + embedding cosine ≥ 0.95). Vocabulary: 4,876 categories, of which 159 have ≥ 3 training images (supervised head). k-NN tuned on validation: K = 50, τ = 0.1.</p>
+<div class="row"><div>
+<div class="cap"><b>Table 1.</b> Test set, fusion + hierarchy (sample-wise).</div>
+<table><tr><th>input</th><th>k</th><th>P@k</th><th>R@k</th><th>F1@k</th><th>hier. P@k</th></tr>
+<tr><td>image + metadata</td><td>1</td><td>0.284</td><td>0.113</td><td>0.148</td><td>0.384</td></tr>
+<tr><td>image + metadata</td><td>5</td><td>0.096</td><td>0.202</td><td>0.119</td><td>0.194</td></tr>
+<tr><td>image + metadata</td><td>10</td><td>0.057</td><td>0.238</td><td>0.086</td><td>0.149</td></tr>
+<tr><td>image only</td><td>1</td><td>0.247</td><td>0.113</td><td>0.142</td><td>0.353</td></tr>
+<tr><td>image only</td><td>5</td><td>0.072</td><td>0.156</td><td>0.089</td><td>0.145</td></tr>
+<tr><td>image only</td><td>10</td><td>0.040</td><td>0.178</td><td>0.061</td><td>0.098</td></tr></table>
+<div class="cap">mAP (macro over test categories) 0.174. Label coverage 0.335.</div>
+</div><div>
+<div class="cap"><b>Table 2.</b> Ablation, image + metadata.</div>
+<table><tr><th>ranking</th><th>F1@5</th><th>R@10</th></tr>
+<tr><td>fusion (no hierarchy)</td><td>0.127</td><td>0.258</td></tr>
+<tr><td>fusion + hierarchy (fixed 0.3)</td><td>0.119</td><td>0.238</td></tr>
+<tr><td>k-NN only</td><td>0.084</td><td>0.171</td></tr>
+<tr><td>metadata lexical only</td><td>0.082</td><td>0.129</td></tr>
+<tr><td>supervised head only</td><td>0.077</td><td>0.164</td></tr>
+<tr><td>metadata text only</td><td>0.066</td><td>0.157</td></tr>
+<tr><td>zero-shot only</td><td>0.057</td><td>0.133</td></tr></table>
+</div></div>
+<div class="row"><div>
+<div class="cap"><b>Table 3.</b> Recall@5 by category frequency in the index.</div>
+<table><tr><th>bucket</th><th>categories</th><th>labels</th><th>macro R</th></tr>
+<tr><td>unseen (0)</td><td>231</td><td>552</td><td>0.024</td></tr>
+<tr><td>tail (1–4)</td><td>21</td><td>65</td><td>0.134</td></tr>
+<tr><td>torso (5–19)</td><td>36</td><td>99</td><td>0.585</td></tr></table>
+<div class="cap"><b>Table 4.</b> By category type (k = 5).</div>
+<table><tr><th>type</th><th>labels</th><th>recall</th><th>precision</th></tr>
+<tr><td>object</td><td>531</td><td>0.121</td><td>0.100</td></tr>
+<tr><td>scene</td><td>68</td><td>0.176</td><td>0.090</td></tr>
+<tr><td>event</td><td>28</td><td>0.214</td><td>0.087</td></tr>
+<tr><td>abstract</td><td>89</td><td>0.101</td><td>0.084</td></tr></table>
+</div><div>
+<div class="cap"><b>Table 5.</b> Robustness, F1@5 (share flagged low-quality).</div>
+<table><tr><th>degradation</th><th>flagged</th><th>+ metadata</th><th>image only</th></tr>
+<tr><td>none</td><td>–</td><td>0.119</td><td>0.089</td></tr>
+<tr><td>Gaussian blur r=2</td><td>1.00</td><td>0.115</td><td>0.077</td></tr>
+<tr><td>Gaussian blur r=5</td><td>1.00</td><td>0.106</td><td>0.054</td></tr>
+<tr><td>JPEG quality 10</td><td>0.28</td><td>0.117</td><td>0.081</td></tr>
+<tr><td>downscale ×0.15</td><td>1.00</td><td>0.112</td><td>0.063</td></tr></table>
+<div class="cap"><b>Efficiency</b> (measured on the team’s Mac, no server GPU): end-to-end per image p50 16.9 ms, p95 128.2 ms; scoring and ranking 0.61 ms/image; index of 1,089 images and 4,876 categories uses 11.7 MB in memory.</div>
+</div></div>
+<p><b>Findings.</b> (1) <b>Vocabulary coverage is the main ceiling:</b> only 33.5% of test labels exist in the vocabulary, so recall cannot exceed 0.335; R@10 = 0.238 already recovers ≈71% of reachable labels. (2) <b>Fusion works:</b> +51% F1@5 over the best single scorer. (3) <b>Metadata helps</b> (+34% F1@5) and keeps accuracy stable under heavy degradation, where image-only accuracy drops by up to 40%. (4) <b>Examples per category matter most:</b> recall@5 is 0.585 for categories with 5–19 examples but 0.024 for unseen ones. (5) <b>Strict metrics under-count:</b> hierarchy-aware P@1 is 0.384 vs strict 0.284, so about one in seven top-1 “errors” is a parent or child of a true label. (6) Events score best on recall (year and title matching).</p>
+
+<h2>3. Progress on testing</h2>
+<ul>
+<li>Evaluation harness complete with every metric planned in M1: P/R/F1@k, mAP, hierarchy-aware precision, frequency buckets, category types, resolution bands, synthetic degradations, latency and memory, plus per-scorer ablation.</li>
+<li>59 automated tests: category filtering, splits, metrics, index search (FAISS and NumPy), hierarchy rules, the trained head, fusion, an offline end-to-end run (train → evaluate → predict → update) on synthetic data, and encoder API checks on tiny CLIP and SigLIP models.</li>
+<li>Continual learning verified: categories added at run time and accepted feedback are suggested immediately without retraining; rejected labels act as negative votes.</li></ul>
+
+<h2>4. Plan for the remaining time</h2>
+<ul>
+<li><b>Run 2 (in progress):</b> ~6,000 files with more files per category, to move categories from the unseen/tail buckets into the torso, where recall is highest.</li>
+<li><b>Raise label coverage:</b> add category names without images (subtrees of the seeds and siblings of known categories), so the zero-shot and lexical scorers can propose them; measure coverage and unseen-bucket recall.</li>
+<li><b>Encoder comparison:</b> SigLIP-base vs CLIP ViT-B/32 on the same split; report the accuracy/latency trade-off.</li>
+<li><b>Reviewed score:</b> manually check a sample of “wrong” suggestions to estimate how many are correct but unlabelled.</li>
+<li><b>Deliverables:</b> demo video (web UI with evidence and live feedback), final report, slides, externally hosted index.</li></ul>
+</body></html>
