@@ -1,0 +1,122 @@
+# Seed categories for the crawl. One Commons category per line (without the
+# "Category:" prefix). Files are taken from each seed and from a few of its
+# subcategories; every file keeps its full, cleaned category set as labels.
+# The list spans the four category families named in the problem statement
+# and deliberately covers regions outside Europe and North America.
+
+# --- Objects: animals, plants, vehicles, artefacts ---
+Cats
+Dogs
+Horses
+Elephants
+Birds
+Butterflies
+Insects
+Flowers
+Trees
+Mushrooms
+Fruits
+Food
+Bicycles
+Automobiles
+Trains
+Trams
+Buses
+Motorcycles
+Aircraft
+Ships
+Bridges
+Churches
+Mosques
+Hindu temples
+Buddhist temples
+Synagogues
+Castles
+Lighthouses
+Skyscrapers
+Windmills
+Fountains
+Statues
+Clocks
+Coins
+Musical instruments
+Paintings
+Pottery
+Textiles
+Masks
+Maps
+Books
+
+# --- Scenes: places, landscapes, settings ---
+Landscapes
+Beaches
+Mountains
+Waterfalls
+Deserts
+Forests
+Rivers
+Lakes
+Streets
+Markets
+Gardens
+Parks
+Villages
+Skylines
+Sunsets
+Night
+Interiors
+Rice fields
+
+# --- Events ---
+Festivals
+Protests
+Parades
+Concerts
+Weddings
+Carnivals
+Fireworks
+Marathons
+Association football matches
+Cricket matches
+Diwali
+Holi
+Christmas
+Ramadan
+Wikimania
+Conferences
+Elections
+Floods
+
+# --- Abstract concepts ---
+Art
+Religion
+History
+Science
+Education
+Poverty
+Love
+Death
+Peace
+Symbols
+Patterns
+Colors
+Light
+Shadows
+Reflections
+Abstract art
+Architecture
+Culture
+
+# --- Geographic breadth ---
+India
+Nigeria
+Kenya
+Egypt
+Brazil
+Peru
+Mexico
+Indonesia
+Vietnam
+Japan
+Bangladesh
+Ethiopia
