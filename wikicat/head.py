@@ -90,7 +90,7 @@ class LinearHead:
                 log.info("head epoch %d/%d loss %.4f", epoch + 1, epochs, total / max(n, 1))
 
         return cls(weights.detach().cpu().numpy(), bias.detach().cpu().numpy(),
-                   float(log_scale.exp()), cat_ids)
+                   log_scale.exp().item(), cat_ids)
 
     def save(self, path: str | Path) -> None:
         np.savez(path, weights=self.weights.astype(np.float16), bias=self.bias,
