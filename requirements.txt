@@ -1,0 +1,19 @@
+# Core
+numpy>=1.24
+pillow>=10.0
+requests>=2.31
+tqdm>=4.66
+scikit-learn>=1.3
+faiss-cpu>=1.7.4
+
+# Encoder (CLIP / SigLIP via Hugging Face)
+torch>=2.1
+transformers>=4.40
+sentencepiece>=0.1.99
+protobuf>=4.25
+
+# Demo UI
+gradio>=4.0
+
+# Tests
+pytest>=7.0

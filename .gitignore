@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.conda/
+
+# Data, caches and model artifacts (hosted externally, never committed)
+data/
+datasets/
+artifacts/
+results/
+feedback/
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.npy
+*.npz
+*.index
+*.faiss
+code.zip
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Gradio
+.gradio/
+flagged/
