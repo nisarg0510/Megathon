@@ -18,7 +18,8 @@ from pathlib import Path
 import numpy as np
 
 from wikicat.config import Config
-from wikicat.content_type import ContentTypeClassifier, commons_title, image_folder_dataset, load_pack, pack_scores
+from wikicat.content_type import (ContentTypeClassifier, commons_title, find_pack_file, image_folder_dataset, load_pack,
+                                  pack_scores)
 from wikicat.encoder import load_encoder
 from wikicat.families import FAMILIES, FamilyScorer
 
@@ -36,12 +37,22 @@ def main(argv=None) -> dict:
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
+    # Read the test packs first so a wrong path shows up before the model loads.
+    packs = {}
+    for p in args.eval_pack:
+        try:
+            f = find_pack_file(p)
+        except FileNotFoundError as e:
+            log.warning("Skipping test pack: %s", e)
+            continue
+        packs[f.parent.name] = load_pack(f)
+        log.info("Test pack %s: %d images (%s)", f.parent.name, len(packs[f.parent.name]), f)
+
     art = Path(args.artifacts_dir)
     cfg = Config.load(art / "config.json") if (art / "config.json").exists() else Config()
     encoder = load_encoder(args.model or cfg.model_name, args.device or cfg.device, cfg.batch_size)
 
     paths, labels = image_folder_dataset(args.data)
-    packs = {p: load_pack(p) for p in args.eval_pack}
     pack_titles = {r["title"] for rows in packs.values() for r in rows if r["title"]}
     manifest_file = Path(args.data) / "manifest.json"
     if pack_titles and manifest_file.exists():
@@ -72,7 +83,7 @@ def main(argv=None) -> dict:
         pe, pok = encoder.encode_paths([r["path"] for r in rows], focus=cfg.center_focus, crop=cfg.center_crop)
         rows = [r for r, good in zip(rows, pok) if good]
         pe = pe[pok]
-        report[f"pack:{Path(pack).name}"] = {
+        report[f"pack:{pack}"] = {
             "prompt_only": pack_scores(rows, np.stack([prompts.zero_shot(e) for e in pe])),
             "trained_classifier": pack_scores(rows, clf.predict_proba(pe)),
         }

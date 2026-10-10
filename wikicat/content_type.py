@@ -95,12 +95,36 @@ def commons_title(url_or_title: str) -> str:
     return t.replace("_", " ").strip().lower()
 
 
-def load_pack(pack_dir: str | Path) -> list[dict]:
+PACK_FILES = (("labels.csv", "primary"), ("answers.csv", "expected_category"))
+
+
+def find_pack_file(pack: str | Path) -> Path:
+    """labels.csv / answers.csv for a pack given as its folder, a parent folder, the CSV itself, or the .zip."""
+    pack = Path(pack).expanduser()
+    if pack.suffix.lower() == ".zip" and pack.is_file():
+        import zipfile
+
+        target = pack.with_suffix("")
+        if not target.exists():
+            with zipfile.ZipFile(pack) as zf:
+                zf.extractall(target)
+        pack = target
+    if pack.is_file() and pack.name in dict(PACK_FILES):
+        return pack
+    if not pack.exists():
+        raise FileNotFoundError(f"Test pack not found: {pack}")
+    found = [f for name, _ in PACK_FILES for f in pack.rglob(name)]
+    if not found:
+        raise FileNotFoundError(f"No labels.csv or answers.csv in {pack} or its subfolders")
+    return min(found, key=lambda f: len(f.parts))
+
+
+def load_pack(pack: str | Path) -> list[dict]:
     """Rows of a test pack: photo-test-pack (labels.csv) or living-objects-dataset (answers.csv)."""
-    pack_dir = Path(pack_dir)
-    for name, primary_col in (("labels.csv", "primary"), ("answers.csv", "expected_category")):
-        f = pack_dir / name
-        if f.exists():
+    f = find_pack_file(pack)
+    pack_dir = f.parent
+    for name, primary_col in PACK_FILES:
+        if f.name == name:
             with f.open(encoding="utf-8-sig", newline="") as fh:
                 rows = list(csv.DictReader(fh))
             out = []
@@ -116,7 +140,7 @@ def load_pack(pack_dir: str | Path) -> list[dict]:
                     "title": commons_title(r.get("source_url", "")),
                 })
             return out
-    raise FileNotFoundError(f"No labels.csv or answers.csv in {pack_dir}")
+    raise FileNotFoundError(f"Unrecognised test pack file: {f}")
 
 
 def pack_scores(rows: list[dict], probs: np.ndarray) -> dict:

@@ -4,7 +4,7 @@ import numpy as np
 from PIL import Image
 
 import train_content_type
-from wikicat.content_type import ContentTypeClassifier, commons_title, load_pack, pack_scores
+from wikicat.content_type import ContentTypeClassifier, commons_title, find_pack_file, load_pack, pack_scores
 from wikicat.families import FAMILIES, FamilyScorer
 
 COLOURS = {"Object": (200, 30, 30), "Living thing": (30, 160, 60), "Scene": (40, 70, 220)}
@@ -70,3 +70,24 @@ def test_train_and_evaluate_on_pack(tmp_path):
     emb = enc.encode_images([img])[0]
     out = FamilyScorer(enc, classifier=clf).score(emb, [])
     assert out[0]["family"] == "Living thing" and abs(sum(f["score"] for f in out) - 1) < 0.01
+
+
+def test_pack_found_when_nested_or_zipped(tmp_path):
+    import zipfile
+
+    inner = tmp_path / "Downloads" / "pack-zip-name" / "photo-test-pack"
+    (inner / "images").mkdir(parents=True)
+    (inner / "labels.csv").write_text("path,primary,accepted_categories\nimages/a.jpg,scenes,scenes;objects\n")
+    for given in (tmp_path / "Downloads" / "pack-zip-name", inner, inner / "labels.csv"):
+        rows = load_pack(given)
+        assert rows[0]["path"] == str(inner / "images" / "a.jpg") and rows[0]["accepted"] == {"scenes", "objects"}
+    archive = tmp_path / "pack.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.write(inner / "labels.csv", "photo-test-pack/labels.csv")
+    assert find_pack_file(archive) == tmp_path / "pack" / "photo-test-pack" / "labels.csv"
+    try:
+        load_pack(tmp_path / "missing")
+    except FileNotFoundError as e:
+        assert "not found" in str(e)
+    else:
+        raise AssertionError("missing pack should raise")
