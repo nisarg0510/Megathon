@@ -64,6 +64,8 @@ def main(argv=None) -> list[dict]:
     parser.add_argument("--no-hierarchy", action="store_true", help="Disable ancestor suppression")
     parser.add_argument("--unsure-threshold", type=float, default=None,
                         help="Mark the image Unsure when the content-type score is below this (default 0.5)")
+    parser.add_argument("--show-specific", dest="hide_specific", action="store_false", default=None,
+                        help="Also show dated / people-count / non-Latin categories below 70%%")
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--no-evidence", action="store_true", help="Hide neighbour evidence")
@@ -71,7 +73,7 @@ def main(argv=None) -> list[dict]:
     args = parser.parse_args(argv)
 
     suggester = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
-                                       center_focus=args.center_focus)
+                                       center_focus=args.center_focus, hide_specific=args.hide_specific)
     outputs = []
     for path in args.images:
         try:

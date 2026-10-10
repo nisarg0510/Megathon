@@ -30,6 +30,7 @@ from .head import LinearHead
 from .hierarchy import CategoryGraph
 from .metadata import LexicalScorer, build_meta_text, extract_years, tokenize
 from .quality import assess_quality
+from .specificity import specificity_reason
 from .ranker import FusionModel, QueryContext, Ranker
 from .retriever import KNNScorer, PrototypeScorer
 
@@ -221,7 +222,16 @@ class CategorySuggester:
         meta_text = build_meta_text(title, description)
         meta_embs = self.encode_meta([meta_text])
         ctx = self.contexts(emb, [meta_text], meta_embs, [quality["low_quality"]])[0]
-        ranked = self.ranker.rank(ctx, top_k, use_hierarchy)
+        hidden = 0
+        if self.cfg.hide_specific:
+            ranked = []
+            for s in self.ranker.rank(ctx, top_k * 3, use_hierarchy):
+                if s["score"] < self.cfg.specific_min_score and specificity_reason(s["category"]):
+                    hidden += 1
+                elif len(ranked) < top_k:
+                    ranked.append(s)
+        else:
+            ranked = self.ranker.rank(ctx, top_k, use_hierarchy)
         for s in ranked:
             s["evidence"] = self.evidence(ctx, s["cat_id"])
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
@@ -237,6 +247,9 @@ class CategorySuggester:
         elif confidence < self.cfg.unsure_threshold:
             notes.append(f"The content type is clear, but the specific categories below are low-confidence "
                          f"(best {confidence:.0%}). Adding a title usually helps.")
+        if hidden:
+            notes.append(f"Hid {hidden} very specific categories (dates, people counts, non-Latin names) "
+                         f"scoring below {self.cfg.specific_min_score:.0%}.")
         if quality["low_quality"]:
             notes.append("Low-quality image (" + ", ".join(quality["flags"]) + "): visual scores are less reliable.")
         if not meta_text:

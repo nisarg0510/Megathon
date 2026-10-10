@@ -211,3 +211,16 @@ def test_center_focus_embedding():
     focused = enc.encode_focused([img], 0.4)
     assert np.allclose(plain, enc.encode_images([img]))
     assert focused.shape == plain.shape and np.allclose(np.linalg.norm(focused, axis=1), 1, atol=1e-5)
+
+
+def test_specificity_reasons():
+    from wikicat.specificity import specificity_reason
+
+    assert specificity_reason("Pacific Partnership 2022") == "date"
+    assert specificity_reason("Diwali 2023 in India") == "date"
+    assert specificity_reason("1990s in Paris") == "date"
+    assert specificity_reason("3 men and 1 woman in Ukraine") == "people count"
+    assert specificity_reason("مسجد وزیر خان") == "non-Latin script"
+    assert specificity_reason("Photographs of red buses parked near the old market in Kolkata") == "very long name"
+    for ok in ("Churches in Paris", "Backpacks", "Côte d'Ivoire", "Cats", "Boeing 747"):
+        assert specificity_reason(ok) is None, ok

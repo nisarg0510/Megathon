@@ -54,6 +54,7 @@ def test_predict_returns_ranked_suggestions(built, capsys):
     [out] = predict.main([image, "--title", "red circle", "--top-k", "4", "--json",
                           "--artifacts-dir", cfg.artifacts_dir])
     assert len(out["content_type"]) == 4
+    assert all(s["score"] >= 0.7 for s in out["suggestions"] if "festival" in s["category"])  # dated ones hidden
     assert out["unsure"] == (out["type_confidence"] < 0.5)
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)

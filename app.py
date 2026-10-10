@@ -217,6 +217,8 @@ def main() -> None:
     parser.add_argument("--read-only", action="store_true", default=bool(os.environ.get("SPACE_ID")),
                         help="Hide the review / add-category panels (use for public links)")
     parser.add_argument("--share", action="store_true")
+    parser.add_argument("--show-specific", dest="hide_specific", action="store_false", default=None,
+                        help="Also show dated / people-count / non-Latin categories below 70%%")
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
@@ -224,7 +226,7 @@ def main() -> None:
     args = parser.parse_args()
     ARTIFACTS, REPORTS_DIR = args.artifacts_dir, args.reports_dir
     SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
-                                       center_focus=args.center_focus)
+                                       center_focus=args.center_focus, hide_specific=args.hide_specific)
     _ = SUGGESTER.encoder  # load weights before the first request
     READ_ONLY = args.read_only
     build_ui(READ_ONLY).launch(server_name=args.host, server_port=args.port, share=args.share)
