@@ -98,3 +98,12 @@ def test_records_roundtrip(tmp_path):
     dl.save_records(recs, tmp_path / "r.jsonl")
     assert dl.load_records(tmp_path / "r.jsonl", "test") == [recs[1]]
     assert json.loads((tmp_path / "r.jsonl").read_text(encoding="utf-8").splitlines()[0])["categories"] == ["Ä"]
+
+
+def test_page_with_empty_extmetadata_list():
+    from wikicat.data_loader import _page_to_record
+
+    page = {"title": "File:A.jpg", "categories": ["Category:Culture of India"],
+            "imageinfo": {"mime": "image/jpeg", "extmetadata": [], "thumburl": "http://x/a.jpg"}}
+    rec = _page_to_record(1, page, seed="Culture")
+    assert rec["categories"] == ["Culture of India"] and rec["description"] == ""

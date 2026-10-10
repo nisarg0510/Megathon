@@ -245,19 +245,25 @@ class CommonsClient:
         return {c: clean_categories(p) for c, p in parents.items()}
 
 
+def _meta_value(meta: dict, key: str):
+    entry = meta.get(key)
+    return entry.get("value", "") if isinstance(entry, dict) else ""
+
+
 def _page_to_record(pageid: int, page: dict, seed: str) -> dict | None:
     info = page.get("imageinfo")
     if not info or info.get("mime") not in RASTER_MIMES:
         return None
-    meta = info.get("extmetadata", {})
+    # PHP serialises an empty map as [], so extmetadata can arrive as a list.
+    meta = info.get("extmetadata") if isinstance(info.get("extmetadata"), dict) else {}
     categories = clean_categories(page.get("categories", []))
     if not categories:
         return None
     return {
         "id": str(pageid),
         "title": page["title"],
-        "description": strip_html(meta.get("ImageDescription", {}).get("value", ""))[:500],
-        "date_original": strip_html(meta.get("DateTimeOriginal", {}).get("value", "")),
+        "description": strip_html(_meta_value(meta, "ImageDescription"))[:500],
+        "date_original": strip_html(_meta_value(meta, "DateTimeOriginal")),
         "timestamp": info.get("timestamp", ""),
         "uploader": info.get("user", ""),
         "width": info.get("width", 0),
