@@ -94,6 +94,12 @@ python app.py                  # open http://127.0.0.1:7860
 python app.py --share --read-only   # temporary public link for anyone; editing panels hidden
 ```
 
+Problem reports sent by testers from the demo are saved in `feedback/reports.jsonl`. To summarise them:
+
+```bash
+python scripts/feedback_report.py > feedback_summary.md
+```
+
 ### 6. Update a built index without retraining
 
 ```bash
