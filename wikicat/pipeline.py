@@ -108,7 +108,15 @@ class CategorySuggester:
     @property
     def family_scorer(self) -> FamilyScorer:
         if self._family_scorer is None:
-            self._family_scorer = FamilyScorer(self.encoder)
+            from .content_type import ContentTypeClassifier
+
+            path = Path(self.cfg.artifacts_dir) / "content_type.npz"
+            classifier = ContentTypeClassifier.load(path) if path.exists() else None
+            if classifier is not None and classifier.model_name not in ("", self.encoder.name):
+                log.warning("content_type.npz was trained with %s, not %s; ignoring it",
+                            classifier.model_name, self.encoder.name)
+                classifier = None
+            self._family_scorer = FamilyScorer(self.encoder, classifier=classifier)
         return self._family_scorer
 
     @classmethod

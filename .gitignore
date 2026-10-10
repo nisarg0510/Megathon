@@ -16,6 +16,7 @@ datasets/
 artifacts/
 results/
 feedback/
+content_type_data/
 *.bin
 *.pt
 *.pth

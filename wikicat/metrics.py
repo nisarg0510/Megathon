@@ -126,7 +126,9 @@ _LIVING = re.compile(r"animal|\bbirds?\b|insect|butterfl|\bmoths?\b|mammal|repti
                      r"\bcats?\b|\bdogs?\b|\bhorses?\b|elephant|cattle|\bcows?\b|\bgoats?\b|sheep|monkey|"
                      r"\blions?\b|tiger|snake|\bfrogs?\b|spider|\bbees?\b|flower|(?<!power )\bplants?\b|"
                      r"\btrees?\b|mushroom|fung(i|us)\b|lichen|\bmoss(es)?\b|wildlife|flora\b|fauna\b|species|"
-                     r"blossom|orchid|\broses?\b|cact(us|i)\b|\bleaves\b", re.IGNORECASE)
+                     r"blossom|orchid|\broses?\b|cact(us|i)\b|\bleaves\b|"
+                     r"portrait|\bpeople\b|\bpersons?\b|\bmen\b|\bwomen\b|\bchildren\b|\bboys?\b|\bgirls?\b|"
+                     r"\bfaces?\b|selfie", re.IGNORECASE)
 
 
 def category_type(name: str) -> str:

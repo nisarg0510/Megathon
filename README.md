@@ -66,6 +66,16 @@ Writes everything needed for inference to `artifacts/`. Useful options:
 | `--index-type` | `flat` (default), `HNSW32`, `IVF1024,PQ64` |
 | `--artifacts-dir` | `artifacts_siglip` (keep several models side by side) |
 
+### 2b. Train the content-type classifier (Object / Living thing / Scene / Event / Abstract concept)
+
+```bash
+python prepare_content_types.py --per-type 200
+python train_content_type.py --eval-pack path/to/photo-test-pack --eval-pack path/to/living-objects-dataset
+```
+
+Writes `artifacts/content_type.npz`, which `predict.py` and `app.py` use automatically. Extra images can be added
+under `content_type_data/<Type>/`. Test packs are only evaluated on, never trained on.
+
 ### 3. Evaluate
 
 ```bash
@@ -139,6 +149,7 @@ python scripts/check_submission.py --stage final --make-zip # also writes code.z
 |---|---|
 | `prepare_data.py` | crawl, import, split the dataset |
 | `train.py` | build `artifacts/` |
+| `prepare_content_types.py`, `train_content_type.py` | content-type classifier |
 | `evaluate.py` | metrics on a split |
 | `predict.py` | command-line suggestions |
 | `app.py` | web demo |

@@ -22,6 +22,7 @@ from pathlib import Path
 
 MB = 1024 * 1024
 FORBIDDEN_DIRS = {".venv", "venv", "env", ".conda", "node_modules", "data", "datasets", "artifacts", "results",
+                  "content_type_data",
                   "__pycache__", ".pytest_cache", ".gradio", "feedback"}
 FORBIDDEN_EXT = {".bin", ".pt", ".pth", ".ckpt", ".safetensors", ".onnx", ".npy", ".npz", ".faiss", ".index",
                  ".h5", ".pkl", ".parquet", ".tar", ".gz", ".zip"}
