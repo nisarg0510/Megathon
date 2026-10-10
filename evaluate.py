@@ -22,7 +22,7 @@ from pathlib import Path
 
 import numpy as np
 
-from wikicat.data_loader import load_records
+from wikicat.data_loader import load_records, read_seed_groups
 from wikicat.encoder import load_image
 from wikicat.metrics import (bucket_report, hierarchical_precision_at_k, label_coverage, mean_average_precision,
                              per_category_recall, percentiles, prf_at_k, type_report)
@@ -100,6 +100,11 @@ def markdown_report(res: dict, ks: list[int]) -> str:
     lines += ["", f"## By original resolution (F1@{k_mid})", "", "| band | images | F1 |", "|---|---|---|"]
     for band, v in res["resolution_bands"].items():
         lines.append(f"| {band} | {v['images']} | {fmt(v['F1'])} |")
+    if res.get("seed_groups"):
+        lines += ["", "## By seed group / region (bias audit)", "",
+                  f"| group | images | F1@{k_mid} | R@{max(ks)} | F1@{k_mid} image only |", "|---|---|---|---|---|"]
+        for g, v in res["seed_groups"].items():
+            lines.append(f"| {g} | {v['images']} | {fmt(v['F1'])} | {fmt(v['R'])} | {fmt(v['F1_image_only'])} |")
     if res.get("degradations"):
         lines += ["", f"## Robustness to degradation (F1@{k_mid})", "",
                   "| degradation | flagged low-quality | with metadata | image only |", "|---|---|---|---|"]
@@ -128,6 +133,8 @@ def main(argv=None) -> dict:
     parser.add_argument("--latency", type=int, default=30, help="Images for the end-to-end latency test (0 = skip)")
     parser.add_argument("--device", default=None)
     parser.add_argument("--out", default="results")
+    parser.add_argument("--seed-dir", default="configs", help="Folder with seed*.txt files (for group labels)")
+    parser.add_argument("--min-group", type=int, default=10, help="Smallest group shown in the bias audit")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     ks = sorted(set(args.k))
@@ -183,6 +190,23 @@ def main(argv=None) -> dict:
     res["resolution_bands"] = {
         b: {"images": len(idx), "F1": prf_at_k([full[i] for i in idx], [gold[i] for i in idx], k_mid)["F1"]}
         for b, idx in sorted(bands.items())}
+
+    seed_files = sorted(Path(args.seed_dir).glob("seed*.txt")) if Path(args.seed_dir).is_dir() else []
+    seed_group = read_seed_groups(*seed_files) if seed_files else {}
+    groups: dict[str, list[int]] = defaultdict(list)
+    for i, r in enumerate(records):
+        seed = r.get("seed", "")
+        groups["random sample" if seed == "random" else seed_group.get(seed, "other")].append(i)
+    res["seed_groups"] = {}
+    for g, idx in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        if len(idx) >= args.min_group:
+            sub_gold = [gold[i] for i in idx]
+            res["seed_groups"][g] = {
+                "images": len(idx),
+                "F1": prf_at_k([full[i] for i in idx], sub_gold, k_mid)["F1"],
+                "R": prf_at_k([full[i] for i in idx], sub_gold, max_k)["R"],
+                "F1_image_only": prf_at_k([full_img[i] for i in idx], sub_gold, k_mid)["F1"],
+            }
 
     res["degradations"] = {}
     for kind, level in parse_degradations(args.degrade or ""):

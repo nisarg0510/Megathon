@@ -43,6 +43,7 @@ def test_evaluate_runs(built):
         for k in ("@1", "@5"):
             assert 0.0 <= res["main"][setting][k]["F1"] <= 1.0
     assert "k-NN only" in res["ablation"] and "blur:3" in res["degradations"]
+    assert sum(g["images"] for g in res["seed_groups"].values()) == res["n_images"]
     assert (root / "results" / "report_test.md").exists()
 
 

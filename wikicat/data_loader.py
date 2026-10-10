@@ -226,6 +226,46 @@ class CommonsClient:
                 records.append(record)
         return records[:limit]
 
+    def random_files(self, n: int, thumb_width: int = 330, max_batches: int | None = None) -> list[dict]:
+        """Uniformly random raster files from all of Commons, with their visible categories.
+
+        Unlike seed-based crawling this follows the real upload distribution,
+        so it gives an unbiased estimate of performance on what is uploaded.
+        """
+        records: dict[str, dict] = {}
+        max_batches = max_batches or max(10, n // 10)
+        for _ in range(max_batches):
+            if len(records) >= n:
+                break
+            params = {
+                "generator": "random",
+                "grnnamespace": 6,
+                "grnlimit": 50,
+                "grnfilterredir": "nonredirects",
+                "prop": "imageinfo|categories",
+                "iiprop": "url|timestamp|user|size|mime|extmetadata",
+                "iiurlwidth": thumb_width,
+                "iiextmetadatafilter": "ImageDescription|DateTimeOriginal",
+                "iiextmetadatalanguage": "en",
+                "clshow": "!hidden",
+                "cllimit": "max",
+            }
+            pages: dict[int, dict] = {}
+            for data in self.query(params):
+                for page in data.get("query", {}).get("pages", []):
+                    merged = pages.setdefault(page["pageid"], {"title": page["title"], "categories": []})
+                    if page.get("imageinfo"):
+                        merged["imageinfo"] = page["imageinfo"][0]
+                    merged["categories"].extend(c["title"] for c in page.get("categories", []))
+                if "clcontinue" not in data.get("continue", {}):
+                    break  # this random batch is complete; the next loop draws a new one
+            for pageid, page in pages.items():
+                rec = _page_to_record(pageid, page, seed="random")
+                if rec is not None:
+                    records.setdefault(rec["id"], rec)
+            log.info("random sample: %d usable files", len(records))
+        return list(records.values())[:n]
+
     def category_parents(self, categories: list[str]) -> dict[str, list[str]]:
         """Visible parent categories of each category (one level)."""
         parents: dict[str, list[str]] = {}
@@ -284,12 +324,23 @@ def _page_to_record(pageid: int, page: dict, seed: str) -> dict | None:
 
 
 def read_seed_file(path: str | Path) -> list[str]:
-    seeds = []
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        line = line.split("#", 1)[0].strip()
-        if line:
-            seeds.append(normalize_category(line))
-    return seeds
+    return list(read_seed_groups(path))
+
+
+def read_seed_groups(*paths: str | Path) -> dict[str, str]:
+    """Seed category -> group, where a group is set by a '# --- Name: ... ---' header."""
+    groups: dict[str, str] = {}
+    for path in paths:
+        group = "other"
+        for raw in Path(path).read_text(encoding="utf-8").splitlines():
+            stripped = raw.strip()
+            if stripped.startswith("# ---"):
+                group = stripped.strip("#- ").split(":")[0].strip() or "other"
+                continue
+            line = stripped.split("#", 1)[0].strip()
+            if line:
+                groups.setdefault(normalize_category(line), group)
+    return groups
 
 
 def crawl(
@@ -300,8 +351,10 @@ def crawl(
     files_per_subcategory: int = 10,
     max_files: int | None = None,
     thumb_width: int = 330,
+    random_files: int = 0,
 ) -> list[dict]:
-    """Collect files from each seed category and a few of its subcategories."""
+    """Collect files from each seed category and a few of its subcategories,
+    plus optionally `random_files` uniformly random files (on top of max_files)."""
     records: dict[str, dict] = {}
 
     def take(category: str, limit: int, seed: str) -> None:
@@ -332,7 +385,14 @@ def crawl(
         log.info("[%d/%d] %s -> %d files total", i + 1, len(seeds), seed, len(records))
 
     out = list(records.values())
-    return out[:max_files] if max_files else out
+    out = out[:max_files] if max_files else out
+    if random_files > 0:
+        seen = {r["id"] for r in out}
+        try:
+            out += [r for r in client.random_files(random_files, thumb_width) if r["id"] not in seen]
+        except Exception as exc:  # noqa: BLE001
+            log.warning("Random sampling failed: %s", exc)
+    return out
 
 
 def fetch_hierarchy(client: CommonsClient, categories: Iterable[str], depth: int = 2,

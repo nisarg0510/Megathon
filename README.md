@@ -37,6 +37,12 @@ Writes `data/records.jsonl`, `data/images/`, `data/hierarchy.json` and `data/see
 For a quick run use `--max-files 1500 --files-per-cat 15 --subcats 2`.
 Stages can also be run one at a time: `crawl`, `download`, `hierarchy`, `split`.
 
+Region-balanced seeds plus a uniformly random sample of Commons:
+
+```bash
+python prepare_data.py all --seeds configs/seed_categories.txt configs/seed_regions.txt --random-files 1500 --max-files 8000
+```
+
 To use a dataset you already have (CSV or JSONL with `image_path` and `categories`, optional `title`, `description`, `timestamp`, `uploader`, `width`, `height`):
 
 ```bash

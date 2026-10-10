@@ -1,0 +1,64 @@
+# Region-balanced seeds: the same number of countries from every continent,
+# so the sample does not simply follow upload volume (which is dominated by
+# Europe and North America). Each header defines the group used in the
+# per-region accuracy table of evaluate.py.
+
+# --- Africa ---
+Ghana
+Senegal
+Tanzania
+Uganda
+Morocco
+South Africa
+Democratic Republic of the Congo
+Cameroon
+
+# --- Asia ---
+Pakistan
+Nepal
+Sri Lanka
+Philippines
+Thailand
+Iran
+Kazakhstan
+Saudi Arabia
+
+# --- Europe ---
+France
+Germany
+Poland
+Italy
+Spain
+Ukraine
+Sweden
+Greece
+
+# --- North America and Caribbean ---
+United States
+Canada
+Guatemala
+Cuba
+Jamaica
+Haiti
+Costa Rica
+Panama
+
+# --- South America ---
+Argentina
+Chile
+Colombia
+Bolivia
+Ecuador
+Venezuela
+Paraguay
+Uruguay
+
+# --- Oceania ---
+Australia
+New Zealand
+Papua New Guinea
+Fiji
+Samoa
+Solomon Islands
+Vanuatu
+Tonga

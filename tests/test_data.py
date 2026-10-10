@@ -107,3 +107,29 @@ def test_page_with_empty_extmetadata_list():
             "imageinfo": {"mime": "image/jpeg", "extmetadata": [], "thumburl": "http://x/a.jpg"}}
     rec = _page_to_record(1, page, seed="Culture")
     assert rec["categories"] == ["Culture of India"] and rec["description"] == ""
+
+
+def test_random_files_and_seed_groups(tmp_path):
+    class RandomClient(dl.CommonsClient):
+        def __init__(self):
+            self.calls = 0
+
+        def query(self, params):
+            assert params["generator"] == "random"
+            self.calls += 1
+            i = self.calls
+            info = {"mime": "image/jpeg", "timestamp": "2020", "user": "u", "thumburl": f"http://x/{i}.jpg"}
+            yield {"query": {"pages": [
+                {"pageid": i, "title": f"File:{i}.jpg", "imageinfo": [info], "categories": [{"title": "Category:Cats"}]},
+                {"pageid": 100 + i, "title": f"File:{i}.pdf", "imageinfo": [dict(info, mime="application/pdf")],
+                 "categories": [{"title": "Category:Cats"}]},
+                {"pageid": 200 + i, "title": f"File:{i}b.jpg", "imageinfo": [info],
+                 "categories": [{"title": "Category:CC-BY-4.0"}]}]}}
+
+    recs = RandomClient().random_files(3)
+    assert len(recs) == 3 and all(r["seed"] == "random" and r["categories"] == ["Cats"] for r in recs)
+
+    seeds = tmp_path / "seeds.txt"
+    seeds.write_text("# intro\n# --- Objects: animals ---\nCats\nDogs  # pets\n# --- Africa ---\nGhana\n")
+    assert dl.read_seed_groups(seeds) == {"Cats": "Objects", "Dogs": "Objects", "Ghana": "Africa"}
+    assert dl.read_seed_file(seeds) == ["Cats", "Dogs", "Ghana"]

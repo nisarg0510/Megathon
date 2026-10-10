@@ -4,6 +4,7 @@ Examples
 --------
     python prepare_data.py all --seeds configs/seed_categories.txt --max-files 6000
     python prepare_data.py crawl --seeds configs/seed_categories.txt
+    python prepare_data.py all --seeds configs/seed_categories.txt configs/seed_regions.txt --random-files 1500
     python prepare_data.py download --workers 4
     python prepare_data.py hierarchy --depth 2
     python prepare_data.py split --val-frac 0.15 --test-frac 0.15
@@ -27,7 +28,8 @@ def records_path(data_dir: Path) -> Path:
 
 def cmd_crawl(args) -> None:
     client = dl.CommonsClient()
-    seeds = dl.read_seed_file(args.seeds)
+    groups = dl.read_seed_groups(*args.seeds)
+    seeds = list(groups)
     records = dl.crawl(
         client, seeds,
         files_per_category=args.files_per_cat,
@@ -35,6 +37,7 @@ def cmd_crawl(args) -> None:
         files_per_subcategory=args.files_per_subcat,
         max_files=args.max_files,
         thumb_width=args.thumb_width,
+        random_files=args.random_files,
     )
     dl.save_records(records, records_path(args.data_dir))
     (args.data_dir / "seeds.json").write_text(json.dumps(seeds, indent=1))
@@ -91,7 +94,10 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     def crawl_args(p):
-        p.add_argument("--seeds", default="configs/seed_categories.txt")
+        p.add_argument("--seeds", nargs="+", default=["configs/seed_categories.txt"],
+                       help="One or more seed files, e.g. configs/seed_categories.txt configs/seed_regions.txt")
+        p.add_argument("--random-files", type=int, default=0,
+                       help="Also sample this many uniformly random Commons files (unbiased sample)")
         p.add_argument("--files-per-cat", type=int, default=40)
         p.add_argument("--subcats", type=int, default=5)
         p.add_argument("--files-per-subcat", type=int, default=10)
