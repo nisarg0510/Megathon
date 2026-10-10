@@ -10,7 +10,9 @@ You may add your own folders of images under content_type_data/<Type>/ as well.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
+import math
 from pathlib import Path
 
 from wikicat import data_loader as dl
@@ -27,17 +29,27 @@ def main(argv=None) -> None:
 
     client = dl.CommonsClient()
     out = Path(args.out)
-    manifest = []
+    # Keep entries from earlier runs: their photos stay in the folders and are trained on too.
+    old = json.loads((out / "manifest.json").read_text()) if (out / "manifest.json").exists() else []
+    manifest = {m["path"]: m for m in old}
     for family, seeds in TYPE_SEEDS.items():
-        per_seed = max(5, args.per_type // len(seeds) + 1)
-        records = dl.crawl(client, seeds, files_per_category=per_seed, subcats_per_category=2,
-                           files_per_subcategory=max(3, per_seed // 3), max_files=args.per_type)
-        records = dl.download_images(records, out / family, workers=args.workers)
-        for r in records:
-            if r.get("image_path"):
-                manifest.append({"type": family, "path": r["image_path"], "title": r["title"],
-                                 "page_url": r["page_url"], "seed": r["seed"]})
-        logging.info("%s: %d photos", family, sum(1 for m in manifest if m["type"] == family))
+        # An equal share per seed category, so seeds late in the list are not crowded out.
+        per_seed = max(5, math.ceil(args.per_type / len(seeds)))
+        seen: set[str] = set()
+        for seed in seeds:
+            records = dl.crawl(client, [seed], files_per_category=math.ceil(per_seed * 0.6), subcats_per_category=2,
+                               files_per_subcategory=math.ceil(per_seed * 0.3), max_files=per_seed)
+            records = [r for r in records if r["id"] not in seen]
+            seen.update(r["id"] for r in records)
+            records = dl.download_images(records, out / family, workers=args.workers)
+            got = [r for r in records if r.get("image_path")]
+            for r in got:
+                manifest[r["image_path"]] = {"type": family, "path": r["image_path"], "title": r["title"],
+                                             "page_url": r["page_url"], "seed": r["seed"]}
+            if not got:
+                logging.warning("%s / %s: no photos (category missing or empty on Commons)", family, seed)
+        logging.info("%s: %d photos", family, sum(1 for m in manifest.values() if m["type"] == family))
+    manifest = list(manifest.values())
     save_manifest(out / "manifest.json", manifest)
     print(f"Saved {len(manifest)} photos to {out}/")
 

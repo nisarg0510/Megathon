@@ -91,3 +91,31 @@ def test_pack_found_when_nested_or_zipped(tmp_path):
         assert "not found" in str(e)
     else:
         raise AssertionError("missing pack should raise")
+
+
+def test_every_seed_gets_a_share(tmp_path, monkeypatch):
+    import prepare_content_types as pct
+
+    seeds = {"Object": ["A", "B"], "Living thing": ["Cats", "Dogs", "Portrait photographs"]}
+    calls = []
+
+    def fake_crawl(client, seed_list, max_files=None, **kw):
+        calls.append((seed_list[0], max_files))
+        return [{"id": f"{seed_list[0]}{i}", "title": f"File:{seed_list[0]}{i}.jpg", "page_url": "", "seed": seed_list[0]}
+                for i in range(max_files)]
+
+    def fake_download(records, folder, workers=4):
+        return [dict(r, image_path=str(folder / f"{r['id']}.jpg")) for r in records]
+
+    monkeypatch.setattr(pct, "TYPE_SEEDS", seeds)
+    monkeypatch.setattr(pct.dl, "CommonsClient", lambda: None)
+    monkeypatch.setattr(pct.dl, "crawl", fake_crawl)
+    monkeypatch.setattr(pct.dl, "download_images", fake_download)
+    out = tmp_path / "ct"
+    out.mkdir()
+    (out / "manifest.json").write_text(json.dumps([{"type": "Object", "path": "old.jpg", "title": "File:old.jpg"}]))
+    pct.main(["--out", str(out), "--per-type", "30"])
+    assert [s for s, _ in calls] == ["A", "B", "Cats", "Dogs", "Portrait photographs"]
+    assert dict(calls)["Portrait photographs"] == 10 and dict(calls)["A"] == 15
+    manifest = json.loads((out / "manifest.json").read_text())
+    assert len(manifest) == 1 + 30 + 30 and any(m["path"] == "old.jpg" for m in manifest)

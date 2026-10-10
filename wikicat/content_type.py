@@ -20,8 +20,11 @@ from .families import FAMILIES
 TYPE_SEEDS = {
     "Object": ["Tools", "Furniture", "Bags", "Bottles", "Cups", "Chairs", "Clocks", "Bicycles", "Automobiles",
                "Musical instruments", "Toys", "Shoes", "Computers", "Lamps", "Books", "Food", "Statues", "Vases"],
+    # People are living things; they get a third of the type so portraits and group photos are not read as events.
     "Living thing": ["Cats", "Dogs", "Birds", "Insects", "Flowers", "Trees", "Mushrooms", "Horses", "Fish",
-                     "Reptiles", "Portrait photographs", "Smiling people", "Butterflies", "Cattle"],
+                     "Reptiles", "Butterflies", "Cattle", "Portrait photographs", "Smiling people",
+                     "Group photographs", "Portrait photographs of men", "Portrait photographs of women",
+                     "Cartes de visite", "Selfies"],
     "Scene": ["Landscapes", "Streets", "Beaches", "Mountains", "Cityscapes", "Forests", "Rivers", "Interiors",
               "Deserts", "Skylines", "Waterfalls", "Lakes", "Parks", "Markets", "Churches", "Bridges"],
     "Event": ["Festivals", "Protests", "Parades", "Concerts", "Weddings", "Association football matches",
@@ -164,6 +167,11 @@ def pack_scores(rows: list[dict], probs: np.ndarray) -> dict:
         people = [i for i in living if rows[i]["group"] == "people"]
         if people:
             res["people_as_living_thing"] = float(np.mean([pred[i] == "Living thing" for i in people]))
+        groups = sorted({rows[i]["group"] for i in living if rows[i]["group"]})
+        res["living_by_group"] = {g: {"n": sum(rows[i]["group"] == g for i in living),
+                                      "as_living_thing": float(np.mean([pred[i] == "Living thing" for i in living
+                                                                         if rows[i]["group"] == g]))}
+                                  for g in groups}
     res["predicted"] = {f: pred.count(f) for f in FAMILIES}
     return res
 

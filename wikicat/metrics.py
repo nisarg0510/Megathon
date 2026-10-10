@@ -107,7 +107,7 @@ def mean_average_precision(scores: list[dict[str, float]], gold: list[set[str]],
 _EVENT = re.compile(r"\b(1[5-9]\d\d|20\d\d)\b|festival|protest|demonstration|election|championship|match(es)?\b|"
                     r"tournament|ceremony|parade|concert|conference|wikimania|olympic|war\b|battle|earthquake|"
                     r"flood|celebration|wedding|carnival|marathon|diwali|holi\b|christmas|ramadan|eid\b|games\b|"
-                    r"visit|meeting|summit|exhibition|fair\b|race\b|cup\b|strike", re.IGNORECASE)
+                    r"\bvisits?\b|meeting|summit|exhibition|fair\b|race\b|cup\b|strike", re.IGNORECASE)
 _SCENE = re.compile(r"landscape|view|panorama|skyline|street|interior|beach|sunset|sunrise|night|forest|mountain|"
                     r"river|lake|park|garden|square|market|harbou?r|port\b|coast|valley|aerial|cityscape|rural|"
                     r"village|town|city|desert|waterfall|field|sky|clouds|road|station|airport|campus|"
@@ -128,7 +128,8 @@ _LIVING = re.compile(r"animal|\bbirds?\b|insect|butterfl|\bmoths?\b|mammal|repti
                      r"\btrees?\b|mushroom|fung(i|us)\b|lichen|\bmoss(es)?\b|wildlife|flora\b|fauna\b|species|"
                      r"blossom|orchid|\broses?\b|cact(us|i)\b|\bleaves\b|"
                      r"portrait|\bpeople\b|\bpersons?\b|\bmen\b|\bwomen\b|\bchildren\b|\bboys?\b|\bgirls?\b|"
-                     r"\bfaces?\b|selfie", re.IGNORECASE)
+                     r"\bfaces?\b|selfie|group photograph|headshot|cartes? de visite|cabinet cards?",
+                     re.IGNORECASE)
 
 
 def category_type(name: str) -> str:
