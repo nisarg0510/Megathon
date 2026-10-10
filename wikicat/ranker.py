@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .data_loader import is_maintenance_category
 from .geo import is_country
 from .hierarchy import CategoryGraph
 from .metadata import LexicalScorer, extract_years, year_feature
@@ -163,14 +164,16 @@ class Ranker:
         self.ancestor_penalty = ancestor_penalty
         self._cat_years = [extract_years(n) for n in names]
         self.hide_countries = hide_countries
-        self._blocked = {i for i, n in enumerate(names) if is_country(n)} if hide_countries else set()
+        self._blocked = {i for i, n in enumerate(names) if self._is_blocked(n)}
 
     def on_categories_added(self) -> None:
         """Keep per-category caches in sync after the vocabulary grows."""
         start = len(self._cat_years)
         self._cat_years.extend(extract_years(n) for n in self.names[start:])
-        if self.hide_countries:
-            self._blocked.update(i for i in range(start, len(self.names)) if is_country(self.names[i]))
+        self._blocked.update(i for i in range(start, len(self.names)) if self._is_blocked(self.names[i]))
+
+    def _is_blocked(self, name: str) -> bool:
+        return is_maintenance_category(name) or (self.hide_countries and is_country(name))
 
     # -- candidates and features ---------------------------------------------
 

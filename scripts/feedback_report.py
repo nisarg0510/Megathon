@@ -17,10 +17,24 @@ def load(path: Path) -> list[dict]:
     return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
+def dedupe(reports: list[dict]) -> list[dict]:
+    """Merge identical reports (e.g. the Send button clicked several times)."""
+    merged: dict[str, dict] = {}
+    for r in reports:
+        key = json.dumps([r["shown"]["suggestions"], sorted(r["issues"]), r["comment"], r["expected"]], sort_keys=True)
+        if key in merged:
+            merged[key]["copies"] += 1
+        else:
+            merged[key] = {**r, "copies": 1}
+    return list(merged.values())
+
+
 def render(reports: list[dict]) -> str:
     if not reports:
         return "No reports yet."
-    lines = [f"# CommonLens tester reports ({len(reports)})", "", "## Issues by type", ""]
+    total = len(reports)
+    reports = dedupe(reports)
+    lines = [f"# Tester reports ({len(reports)} unique, {total} received)", "", "## Issues by type", ""]
     for issue, n in Counter(i for r in reports for i in r["issues"]).most_common():
         lines.append(f"- {issue}: {n}")
     lines += ["", "## Reports", ""]
@@ -29,7 +43,7 @@ def render(reports: list[dict]) -> str:
         types = ", ".join(f"{t['family']} {t['score']:.0%}" for t in shown["content_type"])
         top = "; ".join(f"{s['category']} ({s['score']:.0%})" for s in shown["suggestions"][:5])
         lines += [
-            f"### {r['id']}",
+            f"### {r['id']}" + (f" (sent {r['copies']} times)" if r["copies"] > 1 else ""),
             f"- Issues: {', '.join(r['issues']) or '-'}",
             f"- Comment: {r['comment'] or '-'}",
             f"- Expected: {r['expected'] or '-'}",

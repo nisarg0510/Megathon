@@ -122,9 +122,18 @@ _ABSTRACT = re.compile(r"\bart\b|culture|religion|history|politic|science|econom
                        r"design|motion|silhouette|symmetry|minimalism|mythology|literature", re.IGNORECASE)
 
 
+_LIVING = re.compile(r"animal|\bbirds?\b|insect|butterfl|\bmoths?\b|mammal|reptile|amphibian|\bfish(es)?\b|"
+                     r"\bcats?\b|\bdogs?\b|\bhorses?\b|elephant|cattle|\bcows?\b|\bgoats?\b|sheep|monkey|"
+                     r"\blions?\b|tiger|snake|\bfrogs?\b|spider|\bbees?\b|flower|(?<!power )\bplants?\b|"
+                     r"\btrees?\b|mushroom|fung(i|us)\b|lichen|\bmoss(es)?\b|wildlife|flora\b|fauna\b|species|"
+                     r"blossom|orchid|\broses?\b|cact(us|i)\b|\bleaves\b", re.IGNORECASE)
+
+
 def category_type(name: str) -> str:
     if _EVENT.search(name):
         return "event"
+    if _LIVING.search(name):
+        return "living"
     if _ABSTRACT.search(name):
         return "abstract"
     if _SCENE.search(name):
@@ -147,7 +156,7 @@ def type_report(preds: list[list[str]], gold: list[set[str]], k: int) -> dict[st
             prec[t][1] += 1
             prec[t][0] += p in y
     out = {}
-    for t in ("object", "scene", "event", "abstract"):
+    for t in ("object", "living", "scene", "event", "abstract"):
         out[t] = {
             "labels": rec[t][1],
             "recall": rec[t][0] / rec[t][1] if rec[t][1] else None,

@@ -189,7 +189,7 @@ def test_content_type_families():
     out = scorer.score(img, [("Beaches in Goa", 0.9), ("Bicycles", 0.1)])
     assert [f["family"] for f in out][0] == "Scene" and set(f["family"] for f in out) == set(FAMILIES)
     assert abs(sum(f["score"] for f in out) - 1) < 0.01
-    assert len(scorer.score(img, [])) == 4  # falls back to zero-shot only
+    assert len(scorer.score(img, [])) == len(FAMILIES)  # falls back to zero-shot only
 
 
 def test_country_names():
@@ -224,3 +224,16 @@ def test_specificity_reasons():
     assert specificity_reason("Photographs of red buses parked near the old market in Kolkata") == "very long name"
     for ok in ("Churches in Paris", "Backpacks", "Côte d'Ivoire", "Cats", "Boeing 747"):
         assert specificity_reason(ok) is None, ok
+
+
+def test_living_things_and_contest_categories():
+    from wikicat.data_loader import is_maintenance_category
+    from wikicat.families import family_of
+
+    for name in ("Mushrooms", "Aquatic gilled mushrooms", "Birds of India", "Flowers in Kerala", "Cats", "Trees"):
+        assert family_of(name) == "Living thing", name
+    for name in ("Fruits", "Power plants", "Fishing boats", "Bicycles", "Hot air balloons"):
+        assert family_of(name) == "Object", name
+    assert family_of("Farmers' markets") == "Scene" and family_of("Christmas trees") == "Event"
+    assert is_maintenance_category("Wildlife and nature images from Wiki Science Competition 2025 in Poland")
+    assert is_maintenance_category("Images from Wiki Loves Earth 2023 in India")

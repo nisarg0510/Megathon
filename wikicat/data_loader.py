@@ -55,7 +55,7 @@ _MAINTENANCE_PATTERNS = [
     r"^(quality|valued|featured|assessed) (images|pictures|media|sounds)",
     r"pictures? of the (day|year)|media of the day|^potd",
     r"^(supported|funded|sponsored) by",
-    r"^wiki ?loves\b|^wiki science competition|^wlm\b|^wle\b",
+    r"\bwiki ?loves\b|\bwiki science competition\b|^wlm\b|^wle\b",
     r"^pages? (with|using|that|in)",
     r"^(uncategori[sz]ed|unidentified|unknown|unsorted)\b",
     r"\buser:|^users?\b|^files? by user",

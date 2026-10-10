@@ -235,6 +235,9 @@ class CategorySuggester:
         for s in ranked:
             s["evidence"] = self.evidence(ctx, s["cat_id"])
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
+        # Two types this close (e.g. a fruit market: Object and Scene) are both shown.
+        mixed = len(families) > 1 and families[1]["score"] >= 0.5 * families[0]["score"]
+        type_label = f"{families[0]['family']} + {families[1]['family']}" if mixed else families[0]["family"]
         t2 = time.perf_counter()
         notes = []
         # "Unsure" follows the content type (the first row): Object / Scene / Event / Abstract concept.
@@ -259,6 +262,7 @@ class CategorySuggester:
             "confidence": round(confidence, 3),
             "type_confidence": round(type_confidence, 3),
             "content_type": families,
+            "type_label": type_label,
             "suggestions": ranked,
             "quality": quality,
             "notes": notes,

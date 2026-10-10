@@ -40,7 +40,8 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     top, *rest = result["content_type"]
     others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
     print(f"    {'#':>4}  {'score':>6}  {'category':<50} why")
-    label = f"Unsure (best guess: {top['family']})" if result["unsure"] else f"Content type: {top['family']}"
+    label = (f"Unsure (best guess: {result['type_label']})" if result["unsure"]
+             else f"Content type: {result['type_label']}")
     print(f"    {'★':>4}  {top['score']:6.0%}  {label:<50} other types: {others}")
     for rank, s in enumerate(result["suggestions"], 1):
         cat = s["category"] if len(s["category"]) <= 50 else s["category"][:47] + "..."

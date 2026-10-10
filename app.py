@@ -24,6 +24,7 @@ SUGGESTER: CategorySuggester | None = None
 ARTIFACTS = "artifacts"
 REPORTS_DIR = "feedback"
 READ_ONLY = False
+_SENT_REPORTS: set[str] = set()
 
 ISSUE_TYPES = [
     "Wrong content type (Object / Scene / Event / Abstract)",
@@ -45,7 +46,7 @@ def _thumb(ev: dict):
 def unsure_banner(result: dict) -> str:
     if not result.get("unsure"):
         return ""
-    best = result["content_type"][0]["family"]
+    best = result["type_label"]
     return ("<div style='padding:12px 16px;border-radius:8px;background:#fff4e5;color:#7a4100;"
             "border:1px solid #f0b46c;font-size:1.15em;font-weight:600'>"
             f"⚠ Unsure: the content type is only {result['type_confidence']:.0%} certain "
@@ -73,10 +74,10 @@ def run(image, title, description, top_k, use_hierarchy):
     top, *rest = result["content_type"]
     others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
     if result["unsure"]:
-        label = f"Unsure (best guess: {top['family']})"
+        label = f"Unsure (best guess: {result['type_label']})"
         others = f"content type only {result['type_confidence']:.0%} sure; other types: {others}"
     else:
-        label = f"Content type: {top['family']}"
+        label = f"Content type: {result['type_label']}"
         others = f"other types: {others}"
     rows.append(["★", label, f"{top['score']:.0%}", others, ""])
     for rank, s in enumerate(result["suggestions"], 1):
@@ -95,7 +96,7 @@ def run(image, title, description, top_k, use_hierarchy):
     info.append(f"\n*Encode {t['encode_image']} ms · score and rank {t['score_rank']} ms*")
     choices = [s["category"] for s in result["suggestions"]]
     box_title = (f"Content type: UNSURE (only {result['type_confidence']:.0%} sure)" if result["unsure"]
-                 else f"Content type ({result['type_confidence']:.0%} sure)")
+                 else f"Content type: {result['type_label']} ({result['type_confidence']:.0%} sure)")
     content_type = gr.Label(value={f["family"]: f["score"] for f in result["content_type"]}, label=box_title)
     return (unsure_banner(result), content_type, rows, gallery[:12], "\n".join(info),
             gr.CheckboxGroup(choices=choices, value=[]), image, summarise(result, title, description))
@@ -137,6 +138,10 @@ def save_report(shown: dict | None, image, issues, comment, expected, attach_ima
     comment, expected = (comment or "").strip(), (expected or "").strip()
     if not issues and not comment and not expected:
         return "Tick what is wrong or write a short description first."
+    key = json.dumps([shown.get("suggestions"), sorted(issues or []), comment, expected], sort_keys=True)
+    if key in _SENT_REPORTS:
+        return "This report was already received — thank you!"
+    _SENT_REPORTS.add(key)
     out = Path(reports_dir or REPORTS_DIR)
     out.mkdir(parents=True, exist_ok=True)
     report_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
@@ -169,7 +174,7 @@ def build_ui(read_only: bool = False) -> gr.Blocks:
                 go = gr.Button("Suggest categories", variant="primary")
             with gr.Column(scale=2):
                 banner = gr.HTML()
-                content_type = gr.Label(label="Content type", num_top_classes=4)
+                content_type = gr.Label(label="Content type", num_top_classes=5)
                 info = gr.Markdown()
                 table = gr.Dataframe(headers=["#", "category", "score", "why", "note"],
                                      datatype=["str", "str", "str", "str", "str"], interactive=False, wrap=True,

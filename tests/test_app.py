@@ -31,14 +31,17 @@ def test_report_saved_and_summarised(tmp_path):
     [record] = [json.loads(l) for l in (tmp_path / "reports.jsonl").read_text().splitlines()]
     assert record["expected"] == "Scene" and record["shown"]["suggestions"][0]["category"] == "Churches in Paris"
     assert Image.open(record["image_file"]).size == (1024, 768)  # downscaled copy only
+    assert "already received" in app.save_report(SHOWN, img, [app.ISSUE_TYPES[0]], "Cathedral is a scene", "Scene",
+                                                  True, str(tmp_path))
     app.save_report(SHOWN, img, [], "no image please", "", False, str(tmp_path))
     reports = feedback_report.load(tmp_path / "reports.jsonl")
     assert reports[1]["image_file"] == ""
     text = feedback_report.render(reports)
-    assert "Cathedral is a scene" in text and "Object 60%" in text and "(2)" in text
+    assert "Cathedral is a scene" in text and "Object 60%" in text and "2 unique, 2 received" in text
 
 
 def test_unsure_banner():
     assert app.unsure_banner({"unsure": False}) == ""
-    banner = app.unsure_banner({"unsure": True, "type_confidence": 0.42, "content_type": SHOWN["content_type"]})
+    banner = app.unsure_banner({"unsure": True, "type_confidence": 0.42, "content_type": SHOWN["content_type"],
+                                "type_label": "Object"})
     assert "Unsure" in banner and "42%" in banner and "Object" in banner
