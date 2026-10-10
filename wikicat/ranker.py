@@ -97,7 +97,11 @@ class FusionModel:
         return 1.0 / (1.0 + np.exp(-np.clip(self.logits(x), -30, 30)))
 
     def contributions(self, x: np.ndarray) -> np.ndarray:
-        return ((x - self.mean) / self.scale) * self.coef
+        """Logit added by each feature relative to that feature being absent (0).
+
+        Used for explanations, so a missing signal never shows up as a reason.
+        """
+        return (x / self.scale) * self.coef
 
     def to_dict(self) -> dict:
         return {"feature_names": self.feature_names, "coef": self.coef.tolist(), "intercept": self.intercept,
