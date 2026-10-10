@@ -1,11 +1,12 @@
 """Web demo: upload an image, get category suggestions with evidence, give feedback.
 
-    python app.py                      # http://127.0.0.1:7860
-    python app.py --port 8080 --share  # temporary public link
+    python app.py                          # http://127.0.0.1:7860
+    python app.py --share --read-only      # public link for anyone; editing panels hidden
 """
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 import gradio as gr
@@ -15,6 +16,7 @@ from wikicat.pipeline import CategorySuggester
 
 SUGGESTER: CategorySuggester | None = None
 ARTIFACTS = "artifacts"
+READ_ONLY = False
 
 
 def _thumb(ev: dict):
@@ -61,6 +63,8 @@ def run(image, title, description, top_k, use_hierarchy):
 
 
 def feedback(image, title, accepted, extra, all_rows):
+    if READ_ONLY:
+        return "Editing is disabled on this public demo."
     if image is None:
         return "Run a suggestion first."
     extra_cats = [c.strip() for c in (extra or "").split("\n") if c.strip()]
@@ -77,6 +81,8 @@ def feedback(image, title, accepted, extra, all_rows):
 
 
 def add_category(text):
+    if READ_ONLY:
+        return "Editing is disabled on this public demo."
     names = [c.strip() for c in (text or "").split("\n") if c.strip()]
     if not names:
         return "Enter one category per line."
@@ -85,7 +91,7 @@ def add_category(text):
     return f"Added {len(names)} categories; the vocabulary now has {len(SUGGESTER.vocab)}. They can be suggested right away."
 
 
-def build_ui() -> gr.Blocks:
+def build_ui(read_only: bool = False) -> gr.Blocks:
     with gr.Blocks(title="CommonLens") as demo:
         gr.Markdown("## CommonLens — category suggestions for Wikimedia Commons\nSuggestions are for human review, "
                     "with the similar indexed images that support each one.")
@@ -105,12 +111,13 @@ def build_ui() -> gr.Blocks:
                                      interactive=False, wrap=True,
                                      column_widths=["5%", "33%", "9%", "28%", "25%"])
                 gallery = gr.Gallery(label="Similar categorised images (evidence)", columns=4, height=300)
-        with gr.Accordion("Review: accept or reject suggestions (updates the index live)", open=False):
+        with gr.Accordion("Review: accept or reject suggestions (updates the index live)", open=False,
+                          visible=not read_only):
             accept = gr.CheckboxGroup(label="Accept these categories (unticked ones are recorded as rejected)")
             extra = gr.Textbox(label="Other correct categories (one per line)", lines=2)
             send = gr.Button("Save review")
             feedback_msg = gr.Markdown()
-        with gr.Accordion("Add new categories (no retraining)", open=False):
+        with gr.Accordion("Add new categories (no retraining)", open=False, visible=not read_only):
             new_cats = gr.Textbox(label="Category names, one per line", lines=3)
             add_btn = gr.Button("Add categories")
             add_msg = gr.Markdown()
@@ -123,12 +130,15 @@ def build_ui() -> gr.Blocks:
 
 
 def main() -> None:
-    global SUGGESTER, ARTIFACTS
+    global SUGGESTER, ARTIFACTS, READ_ONLY
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--artifacts-dir", default="artifacts")
     parser.add_argument("--device", default=None)
     parser.add_argument("--port", type=int, default=7860)
-    parser.add_argument("--host", default="127.0.0.1")
+    # Hosted platforms (e.g. Hugging Face Spaces) need the app to listen on all interfaces.
+    parser.add_argument("--host", default="0.0.0.0" if os.environ.get("SPACE_ID") else "127.0.0.1")
+    parser.add_argument("--read-only", action="store_true", default=bool(os.environ.get("SPACE_ID")),
+                        help="Hide the review / add-category panels (use for public links)")
     parser.add_argument("--share", action="store_true")
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
@@ -139,7 +149,8 @@ def main() -> None:
     SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
                                        center_focus=args.center_focus)
     _ = SUGGESTER.encoder  # load weights before the first request
-    build_ui().launch(server_name=args.host, server_port=args.port, share=args.share)
+    READ_ONLY = args.read_only
+    build_ui(READ_ONLY).launch(server_name=args.host, server_port=args.port, share=args.share)
 
 
 if __name__ == "__main__":

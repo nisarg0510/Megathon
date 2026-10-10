@@ -91,7 +91,7 @@ python predict.py photo.jpg --center-focus 0        # use the whole frame equall
 
 ```bash
 python app.py                  # open http://127.0.0.1:7860
-python app.py --share          # temporary public link
+python app.py --share --read-only   # temporary public link for anyone; editing panels hidden
 ```
 
 ### 6. Update a built index without retraining
