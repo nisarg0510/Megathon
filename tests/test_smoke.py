@@ -54,6 +54,7 @@ def test_predict_returns_ranked_suggestions(built, capsys):
     [out] = predict.main([image, "--title", "red circle", "--top-k", "4", "--json",
                           "--artifacts-dir", cfg.artifacts_dir])
     assert len(out["content_type"]) == 4
+    assert out["unsure"] == (out["confidence"] < 0.6)
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)
     assert json.loads(capsys.readouterr().out)[0]["image"] == image
@@ -72,4 +73,6 @@ def test_update_adds_categories_and_feedback(built):
     assert after.graph.is_ancestor("Hexagons", "Purple hexagons")
     # The fed-back image is now its own nearest neighbour and carries the accepted label.
     result = after.suggest(image, top_k=50, use_hierarchy=False)
+    after.add_categories(["Kenya"])
+    assert "Kenya" not in [s["category"] for s in after.suggest(image, title="Kenya", top_k=50)["suggestions"]]
     assert "Brand new category" in [s["category"] for s in result["suggestions"]]

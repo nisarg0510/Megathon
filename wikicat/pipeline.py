@@ -93,7 +93,8 @@ class CategorySuggester:
         self._family_scorer: FamilyScorer | None = None
         self.ranker = Ranker(vocab.names, vocab.freq, prototypes, head, self.lexical, fusion, graph,
                              top_n=cfg.top_n, hierarchy_depth=cfg.hierarchy_depth,
-                             ancestor_ratio=cfg.ancestor_ratio, ancestor_penalty=cfg.ancestor_penalty)
+                             ancestor_ratio=cfg.ancestor_ratio, ancestor_penalty=cfg.ancestor_penalty,
+                             hide_countries=cfg.hide_countries)
 
     # -- loading -----------------------------------------------------------------
 
@@ -226,11 +227,18 @@ class CategorySuggester:
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
         t2 = time.perf_counter()
         notes = []
+        confidence = ranked[0]["score"] if ranked else 0.0
+        unsure = confidence < self.cfg.unsure_threshold
+        if unsure:
+            notes.append(f"Unsure: the best category has {confidence:.0%} confidence, below the "
+                         f"{self.cfg.unsure_threshold:.0%} threshold. Treat the suggestions as guesses.")
         if quality["low_quality"]:
             notes.append("Low-quality image (" + ", ".join(quality["flags"]) + "): visual scores are less reliable.")
         if not meta_text:
             notes.append("No title/description given: suggestions use the image only.")
         return {
+            "unsure": unsure,
+            "confidence": round(confidence, 3),
             "content_type": families,
             "suggestions": ranked,
             "quality": quality,

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .geo import is_country
 from .hierarchy import CategoryGraph
 from .metadata import LexicalScorer, extract_years, year_feature
 
@@ -148,7 +149,7 @@ def suppress_ancestors(names: list[str], scores: np.ndarray, graph: CategoryGrap
 class Ranker:
     def __init__(self, names: list[str], cat_freq: np.ndarray, prototypes, head, lexical: LexicalScorer,
                  fusion: FusionModel, graph: CategoryGraph, top_n: int = 100, hierarchy_depth: int = 3,
-                 ancestor_ratio: float = 0.5, ancestor_penalty: float = 0.3):
+                 ancestor_ratio: float = 0.5, ancestor_penalty: float = 0.3, hide_countries: bool = False):
         self.names = names
         self.cat_freq = cat_freq
         self.prototypes = prototypes
@@ -161,10 +162,15 @@ class Ranker:
         self.ancestor_ratio = ancestor_ratio
         self.ancestor_penalty = ancestor_penalty
         self._cat_years = [extract_years(n) for n in names]
+        self.hide_countries = hide_countries
+        self._blocked = {i for i, n in enumerate(names) if is_country(n)} if hide_countries else set()
 
     def on_categories_added(self) -> None:
         """Keep per-category caches in sync after the vocabulary grows."""
-        self._cat_years.extend(extract_years(n) for n in self.names[len(self._cat_years):])
+        start = len(self._cat_years)
+        self._cat_years.extend(extract_years(n) for n in self.names[start:])
+        if self.hide_countries:
+            self._blocked.update(i for i in range(start, len(self.names)) if is_country(self.names[i]))
 
     # -- candidates and features ---------------------------------------------
 
@@ -181,6 +187,7 @@ class Ranker:
             cands.update(ctx.meta_ids[:self.top_n].tolist())
             cands.update(self.lexical.top(ctx.meta_tokens, self.top_n).keys())
         cands.discard(-1)
+        cands -= self._blocked
         return np.array(sorted(cands), dtype=np.int64)
 
     def features(self, ctx: QueryContext, cands: np.ndarray) -> np.ndarray:

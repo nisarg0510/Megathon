@@ -49,6 +49,10 @@ class Config:
     # Vocabulary
     vocab_include_parents: bool = True
 
+    # Presentation of suggestions
+    hide_countries: bool = True  # never suggest bare country / continent names
+    unsure_threshold: float = 0.6  # top score below this marks the image "Unsure"
+
     # Splits / deduplication
     dedup_threshold: float = 0.95
     index_val_after_fusion: bool = True

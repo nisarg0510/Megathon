@@ -188,3 +188,10 @@ def test_content_type_families():
     assert [f["family"] for f in out][0] == "Scene" and set(f["family"] for f in out) == set(FAMILIES)
     assert abs(sum(f["score"] for f in out) - 1) < 0.01
     assert len(scorer.score(img, [])) == 4  # falls back to zero-shot only
+
+
+def test_country_names():
+    from wikicat.geo import is_country
+
+    assert is_country("India") and is_country("united states") and is_country("Asia")
+    assert not is_country("Beaches in Goa") and not is_country("Indian food")

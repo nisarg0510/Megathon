@@ -31,7 +31,13 @@ def run(image, title, description, top_k, use_hierarchy):
     rows, gallery, seen = [], [], set()
     top, *rest = result["content_type"]
     others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
-    rows.append(["★", f"Content type: {top['family']}", round(top["score"], 3), f"other types: {others}", ""])
+    if result["unsure"]:
+        label = f"Unsure (best guess: {top['family']})"
+        others = f"top category only {result['confidence']:.0%} sure; other types: {others}"
+    else:
+        label = f"Content type: {top['family']}"
+        others = f"other types: {others}"
+    rows.append(["★", label, round(top["score"], 3), others, ""])
     for rank, s in enumerate(result["suggestions"], 1):
         note = f"broader than '{s['suppressed_by']}'" if s["suppressed_by"] else ""
         rows.append([rank, s["category"], round(s["score"], 3), explain(s), note])
@@ -47,7 +53,10 @@ def run(image, title, description, top_k, use_hierarchy):
     t = result["timing_ms"]
     info.append(f"\n*Encode {t['encode_image']} ms · score and rank {t['score_rank']} ms*")
     choices = [s["category"] for s in result["suggestions"]]
-    content_type = {f["family"]: f["score"] for f in result["content_type"]}
+    if result["unsure"]:
+        content_type = f"Unsure (best guess: {top['family']})"
+    else:
+        content_type = {f["family"]: f["score"] for f in result["content_type"]}
     return content_type, rows, gallery[:12], "\n".join(info), gr.CheckboxGroup(choices=choices, value=[]), image
 
 
@@ -121,9 +130,11 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--share", action="store_true")
+    parser.add_argument("--unsure-threshold", type=float, default=None,
+                        help="Mark the image Unsure when the top score is below this (default 0.6)")
     args = parser.parse_args()
     ARTIFACTS = args.artifacts_dir
-    SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device)
+    SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold)
     _ = SUGGESTER.encoder  # load weights before the first request
     build_ui().launch(server_name=args.host, server_port=args.port, share=args.share)
 

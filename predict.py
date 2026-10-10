@@ -40,7 +40,8 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     top, *rest = result["content_type"]
     others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
     print(f"    {'#':>4}  {'score':>6}  {'category':<50} why")
-    print(f"    {'type':>4}  {top['score']:6.3f}  {'Content type: ' + top['family']:<50} other types: {others}")
+    label = f"Unsure (best guess: {top['family']})" if result["unsure"] else f"Content type: {top['family']}"
+    print(f"    {'★':>4}  {top['score']:6.3f}  {label:<50} other types: {others}")
     for rank, s in enumerate(result["suggestions"], 1):
         cat = s["category"] if len(s["category"]) <= 50 else s["category"][:47] + "..."
         extra = f"  (broader than '{s['suppressed_by']}')" if s["suppressed_by"] else ""
@@ -61,11 +62,13 @@ def main(argv=None) -> list[dict]:
     parser.add_argument("--artifacts-dir", default="artifacts")
     parser.add_argument("--device", default=None)
     parser.add_argument("--no-hierarchy", action="store_true", help="Disable ancestor suppression")
+    parser.add_argument("--unsure-threshold", type=float, default=None,
+                        help="Mark the image Unsure when the top score is below this (default 0.6)")
     parser.add_argument("--no-evidence", action="store_true", help="Hide neighbour evidence")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     args = parser.parse_args(argv)
 
-    suggester = CategorySuggester.load(args.artifacts_dir, device=args.device)
+    suggester = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold)
     outputs = []
     for path in args.images:
         try:
