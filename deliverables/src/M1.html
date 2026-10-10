@@ -1,0 +1,58 @@
+<!doctype html><html><head><meta charset="utf-8"><title>M1</title><style>
+@page{size:A4;margin:14mm 15mm}body{font-family:"DejaVu Serif",Georgia,serif;font-size:9.6pt;line-height:1.32;color:#111}
+h1{font-size:14pt;margin:0 0 2px}h2{font-size:11pt;margin:9px 0 3px;border-bottom:1px solid #999}
+.team{font-size:11pt;font-weight:bold;float:right}p{margin:3px 0}ul{margin:2px 0 2px 16px;padding:0}li{margin:1px 0}
+table{border-collapse:collapse;width:100%;font-size:8.8pt;margin:3px 0}td,th{border:1px solid #bbb;padding:2px 4px;vertical-align:top;text-align:left}
+th{background:#eee}.pipe{font-family:"DejaVu Sans Mono",monospace;font-size:8.2pt;background:#f4f4f4;padding:5px;border:1px solid #ccc;white-space:pre;line-height:1.25}
+.sub{color:#444;font-size:9pt}</style></head><body>
+<div class="team" style="float:none;text-align:right">Team Number: TEAM_NO</div>
+<h1>M1 — Automatic Category Suggestions for Wikimedia Commons</h1>
+<div class="sub">Problem Statement 3 · Approach document</div>
+
+<h2>1. Problem understanding</h2>
+<p>Given a newly uploaded image <i>x</i> and optional metadata <i>m</i> (title, description, date), return a ranked list of the top-<i>k</i> Commons categories for an editor to review. This is <b>extreme multi-label classification</b>: millions of categories, organised as a (mostly acyclic) graph, with a heavy-tailed frequency distribution. Key properties we design for:</p>
+<ul>
+<li><b>Heterogeneous labels:</b> objects and scenes are visual; events and abstract concepts need text and metadata (dates, places, captions).</li>
+<li><b>Noisy, incomplete labels:</b> editors file under the most specific category, so ancestors are correct but unlabelled — a missing label is <i>unknown</i>, not negative. Maintenance categories (licences, “Uploaded with…”, contest and camera categories) describe process, not content, and must be removed.</li>
+<li><b>Open label space:</b> categories are added daily; the system must accept them without retraining.</li>
+<li><b>Operational needs:</b> generalise to <i>new</i> uploads, handle varied quality and resolution, scale to daily upload volume, and be open and explainable, in line with Wikimedia principles.</li></ul>
+
+<h2>2. Idea / abstract</h2>
+<p>We treat categories as <b>retrievable objects</b> rather than a fixed softmax output. A frozen vision–language encoder (CLIP/SigLIP) maps images and text into one embedding space. Four complementary scorers each propose candidates: (1) <b>k-NN voting</b> over already-categorised images, which also provides the explanation (“these similar files are in this category”); (2) <b>zero-shot text prototypes</b> of category names, covering rare and brand-new categories; (3) a <b>supervised multi-label head</b> initialised from those text prototypes and trained with asymmetric loss to tolerate missing labels; (4) a <b>metadata scorer</b> (title/description embedding, word overlap with the category name, year agreement) for events and places. A <b>calibrated stacker</b> fuses the scores on a small candidate set, and a <b>hierarchy post-processor</b> prefers the most specific category. New images and categories are added to the indexes immediately; editor accept/reject decisions feed back as labels and hard negatives.</p>
+
+<h2>3. High-level pipeline</h2>
+<div class="pipe">Commons API ─► crawl files + visible categories ─► drop maintenance/hidden categories ─► fetch parent graph
+            ─► download thumbnails ─► temporal split (train old → test new) ─► near-duplicate removal (dHash + cosine)
+
+Upload (image x, optional title/description m)
+  ├─ quality check (blur, resolution) ─────────────────────────────────────────────┐
+  ├─ image encoder z_x ─┬─► k-NN vote over FAISS index of categorised images      │
+  │                     ├─► zero-shot: cosine(z_x, text prototype t_c)            ├─► union of top-100 candidates
+  │                     └─► supervised head  sigmoid(w_c·z_x + b_c)               │   per scorer (a few hundred)
+  └─ text encoder z_m ──┬─► cosine(z_m, t_c)                                      │
+                        └─► lexical overlap + year match with category name ──────┘
+  ─► 15 features per candidate ─► logistic-regression fusion (fit on validation split)
+  ─► suppress ancestors of confident specific categories ─► top-k + confidence + evidence neighbours
+  ─► editor accepts / rejects ─► appended to index (labels / hard negatives), no retraining</div>
+<table><tr><th style="width:23%">Requirement</th><th>Design response</th></tr>
+<tr><td>Objects, scenes, events, abstract</td><td>Visual scorers for objects/scenes; metadata, year matching and text prototypes for events and concepts.</td></tr>
+<tr><td>Accuracy on new images</td><td>Temporal split; dedup across splits; fusion weights fitted only on a held-out validation period.</td></tr>
+<tr><td>Long tail / new categories</td><td>Zero-shot and lexical scorers need no examples; text-initialised head keeps prior knowledge for rare classes.</td></tr>
+<tr><td>Missing labels</td><td>Asymmetric loss with margin; unlabelled ancestors of true labels excluded from fusion training (treated as unknown).</td></tr>
+<tr><td>Efficient &amp; scalable</td><td>One encoder pass + ANN lookup per image; FAISS flat / HNSW / IVF-PQ; fusion only over candidates; asynchronous, never blocks the upload.</td></tr>
+<tr><td>Varied quality</td><td>Blur/resolution flags as fusion features; fusion trained on degraded copies (blur, JPEG, downscale) and on copies without metadata.</td></tr>
+<tr><td>Keeps learning</td><td>Index append for new images/categories; feedback log of accept/reject events for periodic retraining.</td></tr>
+<tr><td>Open, transparent, inclusive</td><td>Open weights and MIT code; each suggestion shows its contributing signals and similar images; seed data spans many regions; human approval required.</td></tr></table>
+
+<h2>4. Planned testing methodology</h2>
+<ul>
+<li><b>Data protocol:</b> Commons files from ~100 seed categories (objects, scenes, events, abstract concepts, and regions across Asia, Africa and Latin America) plus subcategories. Split by upload time (≈70/15/15); remove test images that are perceptual-hash or embedding (cos ≥ 0.95) near-duplicates of training images; optional uploader-disjoint split.</li>
+<li><b>Primary metrics:</b> sample-wise P@k, R@k and F1@k for k ∈ {1, 3, 5, 10}; macro mAP over categories; reported both <i>with</i> metadata and <i>image only</i>.</li>
+<li><b>Tail and breadth:</b> recall@k grouped by training frequency (unseen / tail / torso / head) and by category type (object / scene / event / abstract); label coverage of the vocabulary as an upper bound.</li>
+<li><b>Ablations:</b> each scorer alone vs. fusion, with and without hierarchy post-processing, to quantify what each component adds.</li>
+<li><b>Hierarchy-aware precision:</b> a predicted ancestor or descendant of a true label counts as partially correct; a manual review of a sample of “wrong” suggestions estimates how many are correct-but-unlabelled.</li>
+<li><b>Robustness:</b> metrics stratified by original resolution, and under synthetic Gaussian blur, heavy JPEG compression and extreme downscaling.</li>
+<li><b>Efficiency:</b> p50/p95 end-to-end latency per image, scoring throughput, index memory; comparison of CLIP ViT-B/32 vs. SigLIP encoders.</li>
+<li><b>Continual learning check:</b> add new categories and accepted feedback at run time and verify they are suggested without retraining.</li>
+<li><b>Engineering tests:</b> automated unit tests (category filtering, metrics, index search, hierarchy rules) and an offline end-to-end test that runs on every change.</li></ul>
+</body></html>
