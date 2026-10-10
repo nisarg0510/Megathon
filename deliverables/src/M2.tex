@@ -1,0 +1,158 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[a4paper,margin=1.5cm,columnsep=0.6cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{microtype}
+\setlist{nosep,leftmargin=1.1em}
+\titleformat{\section}{\normalsize\bfseries}{\thesection.}{0.4em}{}
+\titlespacing*{\section}{0pt}{5pt}{2pt}
+\titleformat{\subsection}{\small\bfseries}{\thesubsection}{0.4em}{}
+\titlespacing*{\subsection}{0pt}{3pt}{1pt}
+\setlength{\parskip}{1.5pt}
+\setlength{\parindent}{0pt}
+\setlength{\tabcolsep}{3.2pt}
+\pagestyle{plain}
+
+\title{\vspace{-1.4cm}\textbf{CommonsLens: Progress Report (M2)}\vspace{-0.25cm}}
+\author{TEAM-89\\\small Hackathon Problem Statement 3}
+\date{\vspace{-0.9cm}}
+
+\begin{document}
+\maketitle
+
+\section{Progress Summary}
+The M1 pipeline runs end to end on real Wikimedia Commons data: crawl through the MediaWiki API
+$\rightarrow$ clean categories $\rightarrow$ temporal split $\rightarrow$ frozen CLIP ViT-B/32 encoder
+$\rightarrow$ four scorers $\rightarrow$ calibrated fusion $\rightarrow$ hierarchy decoding $\rightarrow$
+explained suggestions in a web demo. We ran three successively larger experiments (up to 6,303 files and
+24,486 categories), fixed a validation flaw they exposed, and tested the demo on our own photos, which led
+to four usability fixes. Two M1 components are still pending: graph-smoothed prototypes and conformal sets.
+
+\section{Changes Since M1}
+{\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.42\columnwidth}>{\raggedright\arraybackslash}p{0.54\columnwidth}@{}}
+\toprule
+\textbf{M1 component} & \textbf{Status} \\ \midrule
+Frozen encoder (SigLIP/CLIP) & Done: CLIP ViT-B/32; SigLIP supported, comparison pending \\
+$k$NN retrieval + neighbour explanations & Done; $K$, $\tau$ tuned on validation \\
+Text prototypes & Done (prompt ensembles); multilingual labels pending \\
+Supervised head (ASL, text-initialised) & Done; threshold lowered to $\geq$3 examples (466 categories) \\
+Metadata scorer & Done: title/description embedding, word overlap, year agreement; no geotag yet \\
+Graph-smoothed prototypes & \textbf{Pending} (next task) \\
+Calibrated LR fusion on candidate union & Done \\
+Hierarchy-aware decoding & Done; strength now tuned on validation \\
+Conformal sets / abstention & \textbf{Partial}: calibrated ``Unsure'' abstention; conformal sets pending \\
+Temporal split, dedup, uploader grouping & Done (pHash + cosine $\geq$0.95; uploader-disjoint option) \\
+Robustness & Done: low-quality flags; fusion trained on blurred, compressed and downscaled copies \\
+Continual learning & Done: index append, live new categories, rejects as negative votes \\
+\bottomrule
+\end{tabular}}
+
+\vspace{2pt}
+\textbf{Added beyond M1.} (1) \emph{Realistic validation:} the vocabulary is built only from data that precedes
+the validation period; before, every validation label was ``known'' and fusion was tuned on an easy set.
+(2) \emph{Content type first:} each result starts with Object / Scene / Event / Abstract concept, blending a
+vote of the suggested categories with a zero-shot check. (3) \emph{Bias audit:} region-balanced seeds
+(8 countries per continent), optional uniformly random files, accuracy per region and topic.
+(4) \emph{Demo fixes from our own testing} (Section~5). (5) \emph{Tester problem reports} stored with what the
+system showed, for an open feedback loop.
+
+\section{Experiments}
+Labels are editor-assigned categories after removing hidden and maintenance ones; splits are by upload time.
+\textbf{Run 1}: 1,279 files, 107 topical seeds. \textbf{Run 2}: 3,416 files, more per category.
+\textbf{Run 3}: 6,303 files (4,429 / 937 / 937) from 155 seeds plus 1,500 random files, with realistic
+validation; 24,486 categories; $K{=}50$, $\tau{=}0.1$.
+
+\vspace{2pt}
+{\small\centering
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+\textbf{Test, image + metadata} & \textbf{Run 1} & \textbf{Run 2} & \textbf{Run 3} \\ \midrule
+Test images & 190 & 510 & 937 \\
+P@1 & .284 & .339 & \textbf{.350} \\
+F1@1 & .148 & .199 & \textbf{.237} \\
+F1@5 & .119 & \textbf{.160} & .153 \\
+R@10 & .238 & .310 & \textbf{.330} \\
+F1@5, image only & .089 & \textbf{.112} & .084 \\
+Label coverage & .335 & .377 & .362 \\
+Val $-$ test F1@5 gap & -- & .135 & \textbf{.014} \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{3pt}
+{\small\centering
+\begin{tabular}{@{}lrr@{\hspace{10pt}}lrr@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textbf{Run 3 ablation}} & \multicolumn{3}{l@{}}{\textbf{Recall@5 by frequency}} \\
+Ranking & F1@5 & R@10 & Bucket & labels & R \\ \midrule
+Fusion & \textbf{.153} & \textbf{.330} & unseen & 2,412 & .004 \\
+Lexical only & .100 & .203 & tail 1--4 & 318 & .214 \\
+Head only & .070 & .173 & torso 5--19 & 217 & .434 \\
+$k$NN only & .069 & .156 & head 20+ & 380 & .830 \\
+Meta text only & .052 & .170 & & & \\
+Zero-shot only & .005 & .020 & & & \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{3pt}
+{\small\centering
+\begin{tabular}{@{}lrrr@{\hspace{8pt}}lrr@{}}
+\toprule
+\multicolumn{4}{@{}l}{\textbf{Bias audit, F1@5 (Run 3)}} & \multicolumn{3}{l@{}}{\textbf{Robustness, F1@5}} \\
+Group & $n$ & +meta & img & Degradation & +meta & img \\ \midrule
+Objects & 318 & .192 & .140 & none & .153 & .084 \\
+Scenes & 109 & .232 & .162 & blur $r{=}2$ & .155 & .079 \\
+Events & 20 & .233 & .200 & blur $r{=}5$ & .147 & .054 \\
+Abstract & 127 & .050 & .029 & JPEG q10 & .151 & .072 \\
+Europe & 42 & .278 & .037 & down $\times$.15 & .151 & .066 \\
+Africa & 71 & .204 & .009 & & & \\
+S.\ America & 48 & .103 & .009 & & & \\
+Asia & 47 & .087 & .038 & & & \\
+N.\ America & 43 & .032 & .012 & & & \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{2pt}
+\textbf{Efficiency} (on a Mac, no server GPU): p50 19.6\,ms, p95 114.8\,ms per image end to end; 0.89\,ms for
+scoring and ranking; 5,366 indexed images and 24,486 categories in 58.3\,MB.
+
+\section{Findings}
+\begin{itemize}
+\item \textbf{Realistic validation fixed model selection:} the val--test gap fell from .135 to .014, and the
+tuned hierarchy rule (strength chosen on validation) no longer costs accuracy.
+\item \textbf{More data improves the top of the list:} P@1 .284$\rightarrow$.350, R@10 .238$\rightarrow$.330.
+F1@5 is flat on Run 3's harder test set, whose region-balanced seeds add place-specific categories.
+\item \textbf{The tail is the bottleneck}, as M1 predicted: recall@5 is .830 for categories with $\geq$20
+examples but .004 for unseen ones, which hold 72\% of test labels. This is exactly what graph-smoothed
+prototypes target.
+\item \textbf{Fusion} beats the best single scorer by 53\%; \textbf{metadata} is essential for places
+(Africa .204 vs .009 image only); under heavy blur F1@5 drops 4\% with metadata vs 36\% image only.
+\item \textbf{Zero-shot name matching alone collapses} over 24k names (.005), motivating smoothed prototypes and
+SigLIP. Regional accuracy varies widely; groups are small, so differences are indicative.
+\end{itemize}
+
+\section{Progress on Testing}
+\begin{itemize}
+\item \textbf{Evaluation harness} implements every M1 metric (P/R/F1@$k$, mAP, hierarchy-aware precision,
+frequency buckets, type, resolution, degradations, latency, memory, ablations) plus the region audit and
+content-type accuracy.
+\item \textbf{67 automated tests}, including an offline end-to-end run (train $\rightarrow$ evaluate
+$\rightarrow$ predict $\rightarrow$ update) and encoder API checks on tiny CLIP and SigLIP models.
+\item \textbf{Hands-on testing with our own photos} found and fixed: people pulled towards ``Marathons'' and
+floor tiles towards ``Textiles'' (centre-weighted image embedding); a cathedral typed as Object (buildings and
+landmarks now count as Scene); bare country names as noise (hidden); abstention applied to the wrong score
+(now based on content-type confidence, threshold 50\%).
+\item \textbf{Continual learning verified:} new categories and accepted feedback are suggested immediately
+without retraining.
+\end{itemize}
+
+\section{Plan for the Remaining Time}
+\begin{enumerate}
+\item \textbf{Graph-smoothed prototypes} (M1's core idea): blend each category's text embedding with its image
+centroid and its parent/sibling prototypes; ablate tail recall with and without.
+\item \textbf{Conformal suggestion sets:} split conformal calibration on validation; report coverage vs target,
+set size and abstention rate against fixed top-$k$.
+\item \textbf{Encoder comparison} (SigLIP vs CLIP) and an \textbf{unbiased test set} of the newest Commons uploads.
+\item \textbf{Reviewed score} on a sample of ``wrong'' suggestions; final report, slides and demo video.
+\end{enumerate}
+
+\end{document}
