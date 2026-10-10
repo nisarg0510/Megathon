@@ -133,6 +133,27 @@ def tune_knn(suggester: CategorySuggester, q: np.ndarray, gold: list[set[str]],
     return {"best": best, "grid": results}
 
 
+def tune_hierarchy(suggester: CategorySuggester, val_records: list[dict], val_embs: np.ndarray,
+                   val_meta: list[np.ndarray | None], penalties=(0.3, 0.6, 1.0), k_eval: int = 5) -> dict:
+    """Pick the ancestor penalty on validation (1.0 = suppression off), so the
+    hierarchy rule is only applied as strongly as it helps."""
+    texts = [record_meta_text(r) for r in val_records]
+    gold = [set(r["categories"]) for r in val_records]
+    contexts = suggester.contexts(val_embs, texts, val_meta)
+    names = suggester.vocab.names
+    results = []
+    for penalty in penalties:
+        suggester.ranker.ancestor_penalty = penalty
+        preds = []
+        for ctx in contexts:
+            res = suggester.ranker.score(ctx, use_hierarchy=penalty < 1.0)
+            preds.append([names[res["cands"][i]] for i in np.argsort(-res["final"])[:k_eval]])
+        results.append({"penalty": penalty, f"F1@{k_eval}": prf_at_k(preds, gold, k_eval)["F1"]})
+    best = max(results, key=lambda r: r[f"F1@{k_eval}"])
+    suggester.ranker.ancestor_penalty = suggester.cfg.ancestor_penalty = best["penalty"]
+    return {"best": best, "grid": results}
+
+
 def fusion_training_data(suggester: CategorySuggester, contexts, golds: list[set[str]]):
     """Candidate features and labels. Unlabelled ancestors of true labels are
     treated as unknown (dropped), not as negatives."""
@@ -294,6 +315,8 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
         fusion, fusion_report = fit_fusion(suggester, val_records, embs[va], val_meta, rng)
         suggester.fusion = suggester.ranker.fusion = fusion
         report["fusion"] = fusion_report
+        report["hierarchy_tuning"] = tune_hierarchy(suggester, val_records, embs[va], val_meta)
+        log.info("Ancestor penalty tuned: %.1f", cfg.ancestor_penalty)
 
         if cfg.index_val_after_fusion:
             suggester.add_images(embs[va], [r["categories"] for r in val_records],

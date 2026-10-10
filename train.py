@@ -42,6 +42,8 @@ def main(argv=None) -> dict:
         summary["knn_best"] = report["knn_tuning"]["best"]
     if "fusion" in report:
         summary["val_candidate_recall"] = round(report["fusion"]["val_candidate_recall"], 3)
+    if "hierarchy_tuning" in report:
+        summary["hierarchy_best"] = report["hierarchy_tuning"]["best"]
     print(json.dumps(summary, indent=1))
     print(f"Artifacts written to {cfg.artifacts_dir}/")
     return report
