@@ -26,7 +26,7 @@ def _thumb(ev: dict):
 
 def run(image, title, description, top_k, use_hierarchy):
     if image is None:
-        return [], [], "Upload an image first.", gr.CheckboxGroup(choices=[], value=[]), None
+        return None, [], [], "Upload an image first.", gr.CheckboxGroup(choices=[], value=[]), None
     result = SUGGESTER.suggest(image, title or "", description or "", int(top_k), use_hierarchy=use_hierarchy)
     rows, gallery, seen = [], [], set()
     for rank, s in enumerate(result["suggestions"], 1):
@@ -44,7 +44,8 @@ def run(image, title, description, top_k, use_hierarchy):
     t = result["timing_ms"]
     info.append(f"\n*Encode {t['encode_image']} ms · score and rank {t['score_rank']} ms*")
     choices = [s["category"] for s in result["suggestions"]]
-    return rows, gallery[:12], "\n".join(info), gr.CheckboxGroup(choices=choices, value=[]), image
+    content_type = {f["family"]: f["score"] for f in result["content_type"]}
+    return content_type, rows, gallery[:12], "\n".join(info), gr.CheckboxGroup(choices=choices, value=[]), image
 
 
 def feedback(image, title, accepted, extra, all_rows):
@@ -85,6 +86,7 @@ def build_ui() -> gr.Blocks:
                     use_hierarchy = gr.Checkbox(value=True, label="Prefer specific categories")
                 go = gr.Button("Suggest categories", variant="primary")
             with gr.Column(scale=2):
+                content_type = gr.Label(label="Content type", num_top_classes=4)
                 info = gr.Markdown()
                 table = gr.Dataframe(headers=["#", "category", "score", "why", "note"], interactive=False, wrap=True,
                                      column_widths=["5%", "33%", "9%", "28%", "25%"])
@@ -100,7 +102,7 @@ def build_ui() -> gr.Blocks:
             add_msg = gr.Markdown()
         last_image = gr.State()
 
-        go.click(run, [image, title, description, top_k, use_hierarchy], [table, gallery, info, accept, last_image])
+        go.click(run, [image, title, description, top_k, use_hierarchy], [content_type, table, gallery, info, accept, last_image])
         send.click(feedback, [last_image, title, accept, extra, table], feedback_msg)
         add_btn.click(add_category, new_cats, add_msg)
     return demo

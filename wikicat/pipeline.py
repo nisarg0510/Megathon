@@ -25,6 +25,7 @@ import numpy as np
 
 from .config import Config
 from .encoder import BaseEncoder, load_encoder, load_image
+from .families import FamilyScorer
 from .head import LinearHead
 from .hierarchy import CategoryGraph
 from .metadata import LexicalScorer, build_meta_text, extract_years, tokenize
@@ -89,6 +90,7 @@ class CategorySuggester:
         self.items = items
         self.lexical = LexicalScorer(vocab.names)
         self._encoder = encoder
+        self._family_scorer: FamilyScorer | None = None
         self.ranker = Ranker(vocab.names, vocab.freq, prototypes, head, self.lexical, fusion, graph,
                              top_n=cfg.top_n, hierarchy_depth=cfg.hierarchy_depth,
                              ancestor_ratio=cfg.ancestor_ratio, ancestor_penalty=cfg.ancestor_penalty)
@@ -100,6 +102,12 @@ class CategorySuggester:
         if self._encoder is None:
             self._encoder = load_encoder(self.cfg.model_name, self.cfg.device, self.cfg.batch_size)
         return self._encoder
+
+    @property
+    def family_scorer(self) -> FamilyScorer:
+        if self._family_scorer is None:
+            self._family_scorer = FamilyScorer(self.encoder)
+        return self._family_scorer
 
     @classmethod
     def load(cls, artifacts_dir: str | Path, encoder: BaseEncoder | None = None, **overrides) -> "CategorySuggester":
@@ -215,6 +223,7 @@ class CategorySuggester:
         ranked = self.ranker.rank(ctx, top_k, use_hierarchy)
         for s in ranked:
             s["evidence"] = self.evidence(ctx, s["cat_id"])
+        families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
         t2 = time.perf_counter()
         notes = []
         if quality["low_quality"]:
@@ -222,6 +231,7 @@ class CategorySuggester:
         if not meta_text:
             notes.append("No title/description given: suggestions use the image only.")
         return {
+            "content_type": families,
             "suggestions": ranked,
             "quality": quality,
             "notes": notes,

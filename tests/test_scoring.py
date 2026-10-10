@@ -174,3 +174,17 @@ def test_hf_encoder_with_tiny_random_model(family):
     assert imgs.shape == (3, enc.dim) and txts.shape == (2, enc.dim)
     assert np.allclose(np.linalg.norm(imgs, axis=1), 1, atol=1e-5)
     assert np.allclose(np.linalg.norm(txts, axis=1), 1, atol=1e-5)
+
+
+def test_content_type_families():
+    from wikicat.families import FAMILIES, FamilyScorer, family_of
+
+    assert family_of("Diwali 2023 in India") == "Event" and family_of("Beaches in Goa") == "Scene"
+    assert family_of("Abstract art") == "Abstract concept" and family_of("Bicycles") == "Object"
+    enc = HashingEncoder()
+    scorer = FamilyScorer(enc)
+    img = l2_normalize(RNG.standard_normal(enc.dim))
+    out = scorer.score(img, [("Beaches in Goa", 0.9), ("Bicycles", 0.1)])
+    assert [f["family"] for f in out][0] == "Scene" and set(f["family"] for f in out) == set(FAMILIES)
+    assert abs(sum(f["score"] for f in out) - 1) < 0.01
+    assert len(scorer.score(img, [])) == 4  # falls back to zero-shot only

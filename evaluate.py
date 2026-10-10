@@ -24,6 +24,7 @@ import numpy as np
 
 from wikicat.data_loader import load_records, read_seed_groups
 from wikicat.encoder import load_image
+from wikicat.families import family_of
 from wikicat.metrics import (bucket_report, hierarchical_precision_at_k, label_coverage, mean_average_precision,
                              per_category_recall, percentiles, prf_at_k, type_report)
 from wikicat.pipeline import CategorySuggester
@@ -85,6 +86,10 @@ def markdown_report(res: dict, ks: list[int]) -> str:
             hp = res["hierarchical_precision"].get(setting, {}).get(f"@{k}")
             lines.append(f"| {setting} | {k} | {fmt(m['P'])} | {fmt(m['R'])} | {fmt(m['F1'])} | {fmt(hp)} |")
     lines += ["", f"mAP (macro over test categories): {res['mAP']:.3f}", ""]
+    if res.get("content_type"):
+        ct = res["content_type"]
+        lines += [f"Content type (Object / Scene / Event / Abstract concept), top-1 hit: {ct['top1_hit']:.3f} "
+                  f"(always-'Object' baseline {ct['always_object_baseline']:.3f})", ""]
     k_mid = 5 if 5 in ks else ks[0]
     lines += [f"## Ablation (with metadata), F1@{k_mid} and R@{max(ks)}", "", "| ranking | F1 | R |", "|---|---|---|"]
     for name, table in res["ablation"].items():
@@ -178,6 +183,17 @@ def main(argv=None) -> dict:
 
     score_dicts = [{names[c]: float(s) for c, s in zip(r["cands"], r["final"])} for r in scored_meta]
     res["mAP"] = mean_average_precision(score_dicts, gold)
+
+    # Content type (Object / Scene / Event / Abstract concept): is the top
+    # predicted family one of the families of the image's true categories?
+    fam_hits, obj_base = 0, 0
+    for i, r in enumerate(scored_meta):
+        order = np.argsort(-r["final"])[:10]
+        fams = suggester.family_scorer.score(embs[i], [(names[r["cands"][j]], r["final"][j]) for j in order])
+        true_fams = {family_of(g) for g in gold[i]}
+        fam_hits += fams[0]["family"] in true_fams
+        obj_base += "Object" in true_fams
+    res["content_type"] = {"top1_hit": fam_hits / len(records), "always_object_baseline": obj_base / len(records)}
 
     k_mid = 5 if 5 in ks else ks[0]
     freq = {n: float(f) for n, f in zip(names, suggester.vocab.freq)}

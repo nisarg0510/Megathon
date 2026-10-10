@@ -43,6 +43,7 @@ def test_evaluate_runs(built):
         for k in ("@1", "@5"):
             assert 0.0 <= res["main"][setting][k]["F1"] <= 1.0
     assert "k-NN only" in res["ablation"] and "blur:3" in res["degradations"]
+    assert 0.0 <= res["content_type"]["top1_hit"] <= 1.0
     assert sum(g["images"] for g in res["seed_groups"].values()) == res["n_images"]
     assert (root / "results" / "report_test.md").exists()
 
@@ -52,6 +53,7 @@ def test_predict_returns_ranked_suggestions(built, capsys):
     image = str(root / "data" / "images" / "0.png")
     [out] = predict.main([image, "--title", "red circle", "--top-k", "4", "--json",
                           "--artifacts-dir", cfg.artifacts_dir])
+    assert len(out["content_type"]) == 4
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)
     assert json.loads(capsys.readouterr().out)[0]["image"] == image

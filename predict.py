@@ -35,6 +35,8 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     q = result["quality"]
     print(f"    {q['width']}x{q['height']} px, sharpness {q['sharpness']}"
           + (f"  [{', '.join(q['flags'])}]" if q["flags"] else ""))
+    types = " · ".join(f"{f['family']} {f['score']:.0%}" for f in result["content_type"])
+    print(f"    content type: {types}")
     for note in result["notes"]:
         print(f"    note: {note}")
     print(f"    {'#':>2}  {'score':>6}  {'category':<50} why")
