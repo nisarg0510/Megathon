@@ -54,7 +54,7 @@ def test_predict_returns_ranked_suggestions(built, capsys):
     [out] = predict.main([image, "--title", "red circle", "--top-k", "4", "--json",
                           "--artifacts-dir", cfg.artifacts_dir])
     assert len(out["content_type"]) == 4
-    assert out["unsure"] == (out["confidence"] < 0.6)
+    assert out["unsure"] == (out["confidence"] < 0.5)
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)
     assert json.loads(capsys.readouterr().out)[0]["image"] == image

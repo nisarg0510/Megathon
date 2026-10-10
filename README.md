@@ -83,7 +83,7 @@ python predict.py path/to/image.jpg
 python predict.py path/to/image.jpg --title "Diwali lights in Jaipur 2023" --description "..." --top-k 10
 python predict.py img1.jpg img2.jpg --json > suggestions.json
 python predict.py https://upload.wikimedia.org/.../image.jpg
-python predict.py photo.jpg --unsure-threshold 0.5   # mark as Unsure below 50% (default 60%)
+python predict.py photo.jpg --unsure-threshold 0.4   # mark as Unsure below 40% (default 50%)
 python predict.py photo.jpg --center-focus 0        # use the whole frame equally (default 0.4 favours the centre)
 ```
 

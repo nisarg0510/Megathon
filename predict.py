@@ -41,11 +41,11 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
     print(f"    {'#':>4}  {'score':>6}  {'category':<50} why")
     label = f"Unsure (best guess: {top['family']})" if result["unsure"] else f"Content type: {top['family']}"
-    print(f"    {'★':>4}  {top['score']:6.3f}  {label:<50} other types: {others}")
+    print(f"    {'★':>4}  {top['score']:6.0%}  {label:<50} other types: {others}")
     for rank, s in enumerate(result["suggestions"], 1):
         cat = s["category"] if len(s["category"]) <= 50 else s["category"][:47] + "..."
         extra = f"  (broader than '{s['suppressed_by']}')" if s["suppressed_by"] else ""
-        print(f"    {rank:>4}  {s['score']:6.3f}  {cat:<50} {explain(s)}{extra}")
+        print(f"    {rank:>4}  {s['score']:6.0%}  {cat:<50} {explain(s)}{extra}")
         if show_evidence:
             for ev in s["evidence"]:
                 print(f"            similar: {ev['title']} (cos {ev['similarity']:.2f}) {ev['page_url']}")
@@ -63,7 +63,7 @@ def main(argv=None) -> list[dict]:
     parser.add_argument("--device", default=None)
     parser.add_argument("--no-hierarchy", action="store_true", help="Disable ancestor suppression")
     parser.add_argument("--unsure-threshold", type=float, default=None,
-                        help="Mark the image Unsure when the top score is below this (default 0.6)")
+                        help="Mark the image Unsure when the top score is below this (default 0.5)")
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--no-evidence", action="store_true", help="Hide neighbour evidence")

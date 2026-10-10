@@ -26,7 +26,8 @@ def _thumb(ev: dict):
 
 def run(image, title, description, top_k, use_hierarchy):
     if image is None:
-        return None, [], [], "Upload an image first.", gr.CheckboxGroup(choices=[], value=[]), None
+        return gr.Label(value=None, label="Content type"), [], [], "Upload an image first.", \
+            gr.CheckboxGroup(choices=[], value=[]), None
     result = SUGGESTER.suggest(image, title or "", description or "", int(top_k), use_hierarchy=use_hierarchy)
     rows, gallery, seen = [], [], set()
     top, *rest = result["content_type"]
@@ -37,10 +38,10 @@ def run(image, title, description, top_k, use_hierarchy):
     else:
         label = f"Content type: {top['family']}"
         others = f"other types: {others}"
-    rows.append(["★", label, round(top["score"], 3), others, ""])
+    rows.append(["★", label, f"{top['score']:.0%}", others, ""])
     for rank, s in enumerate(result["suggestions"], 1):
         note = f"broader than '{s['suppressed_by']}'" if s["suppressed_by"] else ""
-        rows.append([rank, s["category"], round(s["score"], 3), explain(s), note])
+        rows.append([str(rank), s["category"], f"{s['score']:.0%}", explain(s), note])
         for ev in s["evidence"]:
             thumb = _thumb(ev)
             if thumb and ev["title"] not in seen:
@@ -53,10 +54,9 @@ def run(image, title, description, top_k, use_hierarchy):
     t = result["timing_ms"]
     info.append(f"\n*Encode {t['encode_image']} ms · score and rank {t['score_rank']} ms*")
     choices = [s["category"] for s in result["suggestions"]]
-    if result["unsure"]:
-        content_type = f"Unsure (best guess: {top['family']})"
-    else:
-        content_type = {f["family"]: f["score"] for f in result["content_type"]}
+    title = (f"Content type: UNSURE (top category only {result['confidence']:.0%} sure)" if result["unsure"]
+             else f"Content type (top category {result['confidence']:.0%} sure)")
+    content_type = gr.Label(value={f["family"]: f["score"] for f in result["content_type"]}, label=title)
     return content_type, rows, gallery[:12], "\n".join(info), gr.CheckboxGroup(choices=choices, value=[]), image
 
 
@@ -101,7 +101,7 @@ def build_ui() -> gr.Blocks:
             with gr.Column(scale=2):
                 content_type = gr.Label(label="Content type", num_top_classes=4)
                 info = gr.Markdown()
-                table = gr.Dataframe(headers=["#", "category", "score", "why", "note"], datatype=["str", "str", "number", "str", "str"],
+                table = gr.Dataframe(headers=["#", "category", "score", "why", "note"], datatype=["str", "str", "str", "str", "str"],
                                      interactive=False, wrap=True,
                                      column_widths=["5%", "33%", "9%", "28%", "25%"])
                 gallery = gr.Gallery(label="Similar categorised images (evidence)", columns=4, height=300)
@@ -133,7 +133,7 @@ def main() -> None:
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
-                        help="Mark the image Unsure when the top score is below this (default 0.6)")
+                        help="Mark the image Unsure when the top score is below this (default 0.5)")
     args = parser.parse_args()
     ARTIFACTS = args.artifacts_dir
     SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
