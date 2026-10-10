@@ -137,6 +137,8 @@ def main(argv=None) -> dict:
                         help='Comma list of kind:level, or "" to skip')
     parser.add_argument("--latency", type=int, default=30, help="Images for the end-to-end latency test (0 = skip)")
     parser.add_argument("--device", default=None)
+    parser.add_argument("--center-focus", type=float, default=0.0,
+                        help="Evaluate with centre-focused embeddings (re-encodes test images), e.g. 0.4")
     parser.add_argument("--out", default="results")
     parser.add_argument("--seed-dir", default="configs", help="Folder with seed*.txt files (for group labels)")
     parser.add_argument("--min-group", type=int, default=10, help="Smallest group shown in the bias audit")
@@ -160,6 +162,9 @@ def main(argv=None) -> dict:
     embs, ok = embed_images(suggester.encoder, records, data_dir / "cache" / f"img_{slug}.npz")
     records = [r for r, good in zip(records, ok) if good]
     embs = embs[ok]
+    if args.center_focus > 0:
+        embs, _ = suggester.encoder.encode_paths([r["image_path"] for r in records], focus=args.center_focus,
+                                                 crop=cfg.center_crop)
     gold = [set(r["categories"]) for r in records]
     texts = [record_meta_text(r) for r in records]
     metas = embed_meta(suggester, records, data_dir / "cache" / f"meta_{slug}.npz")

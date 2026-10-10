@@ -130,11 +130,14 @@ def main() -> None:
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--share", action="store_true")
+    parser.add_argument("--center-focus", type=float, default=None,
+                        help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
                         help="Mark the image Unsure when the top score is below this (default 0.6)")
     args = parser.parse_args()
     ARTIFACTS = args.artifacts_dir
-    SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold)
+    SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
+                                       center_focus=args.center_focus)
     _ = SUGGESTER.encoder  # load weights before the first request
     build_ui().launch(server_name=args.host, server_port=args.port, share=args.share)
 

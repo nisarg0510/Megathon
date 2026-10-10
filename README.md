@@ -71,6 +71,7 @@ Writes everything needed for inference to `artifacts/`. Useful options:
 ```bash
 python evaluate.py --split test
 python evaluate.py --split test --k 1 3 5 10 --degrade blur:2,jpeg:10,downscale:0.15 --latency 50
+python evaluate.py --center-focus 0.4                 # evaluate with centre-focused embeddings
 ```
 
 Writes `results/metrics_test.json` and `results/report_test.md`.
@@ -83,6 +84,7 @@ python predict.py path/to/image.jpg --title "Diwali lights in Jaipur 2023" --des
 python predict.py img1.jpg img2.jpg --json > suggestions.json
 python predict.py https://upload.wikimedia.org/.../image.jpg
 python predict.py photo.jpg --unsure-threshold 0.5   # mark as Unsure below 50% (default 60%)
+python predict.py photo.jpg --center-focus 0        # use the whole frame equally (default 0.4 favours the centre)
 ```
 
 ### 5. Demo UI

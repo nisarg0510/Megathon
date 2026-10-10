@@ -15,12 +15,14 @@ from .metrics import category_type
 FAMILIES = ("Object", "Scene", "Event", "Abstract concept")
 _TYPE_TO_FAMILY = {"object": "Object", "scene": "Scene", "event": "Event", "abstract": "Abstract concept"}
 FAMILY_PROMPTS = {
-    "Object": ["a photo of an object", "a close-up photo of an animal, plant or thing",
-               "a photo of a vehicle, building or artefact"],
-    "Scene": ["a photo of a landscape", "a photo of a place or a street", "a photo of an indoor or outdoor scene"],
-    "Event": ["a photo of an event", "a photo of a festival, ceremony, protest or sports match",
-              "a photo of a crowd at a celebration"],
-    "Abstract concept": ["an abstract image", "a pattern, symbol or texture", "an artwork expressing an idea or emotion"],
+    "Object": ["a photo of a single object", "a close-up photo of a bag, tool, device or other thing",
+               "a photo of an animal or a plant", "a photo of a vehicle, fence, wire, building or other structure"],
+    "Scene": ["a photo of a landscape", "a photo of a street, room or other place",
+              "a wide view of a city or of nature"],
+    "Event": ["a photo of an event such as a festival, ceremony, parade or sports match",
+              "a crowd of people at a celebration, race or protest"],
+    "Abstract concept": ["an abstract painting or digital artwork", "a pattern or texture with no recognisable objects",
+                         "a symbol, logo or diagram"],
 }
 
 
@@ -29,11 +31,10 @@ def family_of(category: str) -> str:
 
 
 class FamilyScorer:
-    def __init__(self, encoder, vote_weight: float = 0.7, temperature: float = 0.01):
+    def __init__(self, encoder, vote_weight: float = 0.5, temperature: float = 0.01):
         self.vote_weight = vote_weight
         self.temperature = temperature
-        prompts = [p for f in FAMILIES for p in FAMILY_PROMPTS[f]]
-        emb = encoder.encode_texts(prompts).reshape(len(FAMILIES), -1, encoder.dim).mean(axis=1)
+        emb = np.stack([encoder.encode_texts(FAMILY_PROMPTS[f]).mean(axis=0) for f in FAMILIES])
         self.prototypes = emb / np.maximum(np.linalg.norm(emb, axis=1, keepdims=True), 1e-12)
 
     def zero_shot(self, img_emb: np.ndarray) -> np.ndarray:

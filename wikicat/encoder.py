@@ -73,6 +73,14 @@ def load_image(source: str | Path | bytes | Image.Image) -> Image.Image:
     return img.convert("RGB")
 
 
+def center_crop(img: Image.Image, frac: float = 0.6) -> Image.Image:
+    """Central region covering `frac` of the width and height."""
+    w, h = img.size
+    cw, ch = max(1, int(w * frac)), max(1, int(h * frac))
+    left, top = (w - cw) // 2, (h - ch) // 2
+    return img.crop((left, top, left + cw, top + ch))
+
+
 def _safe_load(path: str) -> Image.Image | None:
     try:
         img = load_image(path)
@@ -111,8 +119,20 @@ class BaseEncoder:
             return np.zeros((0, self.dim), dtype=np.float32)
         return np.concatenate(out)
 
+    def encode_focused(self, images: Sequence[Image.Image], weight: float = 0.0, frac: float = 0.6) -> np.ndarray:
+        """Blend the whole-image embedding with one of its central crop.
+
+        Gives the main subject in the middle more say than background clutter
+        at the edges (floor tiles, bystanders). weight=0 is the plain embedding.
+        """
+        full = self.encode_images(images)
+        if weight <= 0 or not len(images):
+            return full
+        center = self.encode_images([center_crop(im, frac) for im in images])
+        return l2_normalize((1 - weight) * full + weight * center)
+
     def encode_paths(self, paths: Sequence[str], workers: int = 4, chunk: int = 256,
-                     progress: bool = True) -> tuple[np.ndarray, np.ndarray]:
+                     progress: bool = True, focus: float = 0.0, crop: float = 0.6) -> tuple[np.ndarray, np.ndarray]:
         """Encode image files. Returns (embeddings, ok_mask); failed rows are zero."""
         embs = np.zeros((len(paths), self.dim), dtype=np.float32)
         ok = np.zeros(len(paths), dtype=bool)
@@ -126,7 +146,7 @@ class BaseEncoder:
                 images = list(pool.map(_safe_load, paths[start:start + chunk]))
                 idx = [i for i, im in enumerate(images) if im is not None]
                 if idx:
-                    embs[[start + i for i in idx]] = self.encode_images([images[i] for i in idx])
+                    embs[[start + i for i in idx]] = self.encode_focused([images[i] for i in idx], focus, crop)
                     ok[[start + i for i in idx]] = True
         return embs, ok
 

@@ -216,7 +216,7 @@ class CategorySuggester:
         t0 = time.perf_counter()
         img = load_image(image)
         quality = assess_quality(img, original_size)
-        emb = self.encoder.encode_images([img])
+        emb = self.encoder.encode_focused([img], self.cfg.center_focus, self.cfg.center_crop)
         t1 = time.perf_counter()
         meta_text = build_meta_text(title, description)
         meta_embs = self.encode_meta([meta_text])

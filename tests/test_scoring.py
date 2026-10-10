@@ -182,7 +182,7 @@ def test_content_type_families():
     assert family_of("Diwali 2023 in India") == "Event" and family_of("Beaches in Goa") == "Scene"
     assert family_of("Abstract art") == "Abstract concept" and family_of("Bicycles") == "Object"
     enc = HashingEncoder()
-    scorer = FamilyScorer(enc)
+    scorer = FamilyScorer(enc, vote_weight=1.0)
     img = l2_normalize(RNG.standard_normal(enc.dim))
     out = scorer.score(img, [("Beaches in Goa", 0.9), ("Bicycles", 0.1)])
     assert [f["family"] for f in out][0] == "Scene" and set(f["family"] for f in out) == set(FAMILIES)
@@ -195,3 +195,17 @@ def test_country_names():
 
     assert is_country("India") and is_country("united states") and is_country("Asia")
     assert not is_country("Beaches in Goa") and not is_country("Indian food")
+
+
+def test_center_focus_embedding():
+    from PIL import Image
+
+    from wikicat.encoder import center_crop
+
+    img = Image.new("RGB", (100, 50), "white")
+    assert center_crop(img, 0.6).size == (60, 30)
+    enc = HashingEncoder()
+    plain = enc.encode_focused([img], 0.0)
+    focused = enc.encode_focused([img], 0.4)
+    assert np.allclose(plain, enc.encode_images([img]))
+    assert focused.shape == plain.shape and np.allclose(np.linalg.norm(focused, axis=1), 1, atol=1e-5)

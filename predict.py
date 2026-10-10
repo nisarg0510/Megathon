@@ -64,11 +64,14 @@ def main(argv=None) -> list[dict]:
     parser.add_argument("--no-hierarchy", action="store_true", help="Disable ancestor suppression")
     parser.add_argument("--unsure-threshold", type=float, default=None,
                         help="Mark the image Unsure when the top score is below this (default 0.6)")
+    parser.add_argument("--center-focus", type=float, default=None,
+                        help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--no-evidence", action="store_true", help="Hide neighbour evidence")
     parser.add_argument("--json", action="store_true", help="Print machine-readable JSON")
     args = parser.parse_args(argv)
 
-    suggester = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold)
+    suggester = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
+                                       center_focus=args.center_focus)
     outputs = []
     for path in args.images:
         try:
