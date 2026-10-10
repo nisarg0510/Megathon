@@ -35,15 +35,16 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     q = result["quality"]
     print(f"    {q['width']}x{q['height']} px, sharpness {q['sharpness']}"
           + (f"  [{', '.join(q['flags'])}]" if q["flags"] else ""))
-    types = " · ".join(f"{f['family']} {f['score']:.0%}" for f in result["content_type"])
-    print(f"    content type: {types}")
     for note in result["notes"]:
         print(f"    note: {note}")
-    print(f"    {'#':>2}  {'score':>6}  {'category':<50} why")
+    top, *rest = result["content_type"]
+    others = ", ".join(f"{f['family']} {f['score']:.0%}" for f in rest)
+    print(f"    {'#':>4}  {'score':>6}  {'category':<50} why")
+    print(f"    {'type':>4}  {top['score']:6.3f}  {'Content type: ' + top['family']:<50} other types: {others}")
     for rank, s in enumerate(result["suggestions"], 1):
         cat = s["category"] if len(s["category"]) <= 50 else s["category"][:47] + "..."
         extra = f"  (broader than '{s['suppressed_by']}')" if s["suppressed_by"] else ""
-        print(f"    {rank:>2}  {s['score']:6.3f}  {cat:<50} {explain(s)}{extra}")
+        print(f"    {rank:>4}  {s['score']:6.3f}  {cat:<50} {explain(s)}{extra}")
         if show_evidence:
             for ev in s["evidence"]:
                 print(f"            similar: {ev['title']} (cos {ev['similarity']:.2f}) {ev['page_url']}")
