@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -23,7 +24,10 @@ log = logging.getLogger(__name__)
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
 try:
-    if os.environ.get("WIKICAT_NO_FAISS"):
+    # faiss-cpu and torch each bundle OpenMP; on macOS loading both in one
+    # process can deadlock, so exact NumPy search is the default there.
+    # Set WIKICAT_USE_FAISS=1 to force FAISS anyway.
+    if os.environ.get("WIKICAT_NO_FAISS") or (sys.platform == "darwin" and not os.environ.get("WIKICAT_USE_FAISS")):
         raise ImportError
     import faiss  # type: ignore
 except ImportError:  # pragma: no cover - depends on the environment
