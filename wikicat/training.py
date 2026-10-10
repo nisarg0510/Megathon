@@ -236,7 +236,7 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
     embs, ok = embed_images(encoder, records, data_dir / "cache" / f"img_{model_slug(encoder.name)}.npz")
     records = [r for r, good in zip(records, ok) if good]
     embs = embs[ok]
-    split = np.array([r["split"] for r in records])
+    split = np.array([r["split"] for r in records], dtype=object)
     tr = np.where(split == "train")[0]
 
     # Embedding-level near-duplicate removal (complements the perceptual hash).

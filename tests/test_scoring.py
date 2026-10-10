@@ -136,3 +136,41 @@ def test_quality_flags_and_encoder():
     assert e.shape == (2, enc.dim) and float(e[0] @ e[1]) > 0.9
     assert enc.encode_categories(["Cats", "Dogs"]).shape == (2, enc.dim)
     assert category_to_text("Mercury (planet)") == "Mercury, planet"
+
+
+@pytest.mark.parametrize("family", ["clip", "siglip"])
+def test_hf_encoder_with_tiny_random_model(family):
+    """Exercises HFEncoder's calls into transformers (v4 tensors / v5 ModelOutputs)
+    with a tiny randomly initialised model, so no download is needed."""
+    torch = pytest.importorskip("torch")
+    transformers = pytest.importorskip("transformers")
+    from PIL import Image
+
+    from wikicat.encoder import HFEncoder
+
+    tiny = dict(hidden_size=32, intermediate_size=64, num_hidden_layers=1, num_attention_heads=2)
+    text_cfg = dict(tiny, vocab_size=100, bos_token_id=0, eos_token_id=1, pad_token_id=1)
+    vision_cfg = dict(tiny, image_size=32, patch_size=16)
+    if family == "clip":
+        model = transformers.CLIPModel(transformers.CLIPConfig(text_config=text_cfg, vision_config=vision_cfg,
+                                                               projection_dim=16))
+    else:
+        model = transformers.SiglipModel(transformers.SiglipConfig(text_config=text_cfg, vision_config=vision_cfg))
+
+    class FakeProcessor:
+        def __call__(self, images=None, text=None, return_tensors="pt", **kwargs):
+            if images is not None:
+                return {"pixel_values": torch.randn(len(images), 3, 32, 32)}
+            ids = torch.randint(2, 100, (len(text), 6))
+            return {"input_ids": ids, "attention_mask": torch.ones_like(ids)}
+
+    enc = HFEncoder.__new__(HFEncoder)
+    enc.torch, enc.name, enc.device, enc.dtype, enc.batch_size = torch, family, "cpu", torch.float32, 2
+    enc.model, enc.processor, enc.is_siglip = model.eval(), FakeProcessor(), family == "siglip"
+    enc.dim = enc.encode_texts(["a photo"]).shape[1]
+
+    imgs = enc.encode_images([Image.new("RGB", (40, 30))] * 3)
+    txts = enc.encode_categories(["Cats", "Churches in Paris"])
+    assert imgs.shape == (3, enc.dim) and txts.shape == (2, enc.dim)
+    assert np.allclose(np.linalg.norm(imgs, axis=1), 1, atol=1e-5)
+    assert np.allclose(np.linalg.norm(txts, axis=1), 1, atol=1e-5)
