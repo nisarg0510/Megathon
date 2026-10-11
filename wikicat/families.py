@@ -1,4 +1,4 @@
-"""Content type of an image: Object, Living thing, Scene, Event or Abstract concept.
+"""Content type of an image: Object, Living object, Scene, Event or Abstract concept.
 
 The four families named in the problem statement plus living things (people,
 animals, plants, fungi), which testers did not see as objects. An image's family scores
@@ -13,13 +13,15 @@ import numpy as np
 
 from .metrics import category_type
 
-FAMILIES = ("Object", "Living thing", "Scene", "Event", "Abstract concept")
-_TYPE_TO_FAMILY = {"object": "Object", "living": "Living thing", "scene": "Scene", "event": "Event",
+FAMILIES = ("Object", "Living object", "Scene", "Event", "Abstract concept")
+# Names used by earlier versions (saved classifiers, training folders).
+LEGACY_FAMILIES = {"Living thing": "Living object"}
+_TYPE_TO_FAMILY = {"object": "Object", "living": "Living object", "scene": "Scene", "event": "Event",
                    "abstract": "Abstract concept"}
 FAMILY_PROMPTS = {
     "Object": ["a photo of a single object", "a close-up photo of a bag, tool, device or other thing",
                "a photo of food or a household item", "a photo of a vehicle, fence, wire or other man-made object"],
-    "Living thing": ["a photo of an animal", "a photo of a plant, flower or tree",
+    "Living object": ["a photo of an animal", "a photo of a plant, flower or tree",
                      "a photo of a mushroom, insect or bird in nature", "a portrait photo of a person"],
     "Scene": ["a photo of a landscape", "a photo of a street, square, room or other place",
               "a wide view of a city or of nature", "a photo of a building, church, temple or famous landmark"],

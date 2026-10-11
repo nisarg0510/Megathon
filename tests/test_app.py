@@ -42,6 +42,6 @@ def test_report_saved_and_summarised(tmp_path):
 
 def test_unsure_banner():
     assert app.unsure_banner({"unsure": False}) == ""
-    banner = app.unsure_banner({"unsure": True, "type_confidence": 0.42, "content_type": SHOWN["content_type"],
+    banner = app.unsure_banner({"unsure": True, "type_confidence": 0.35, "content_type": SHOWN["content_type"],
                                 "type_label": "Object"})
-    assert "Unsure" in banner and "42%" in banner and "Object" in banner
+    assert "Unsure" in banner and "35%" in banner and "human feedback is suggested" in banner

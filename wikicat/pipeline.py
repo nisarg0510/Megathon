@@ -292,13 +292,12 @@ class CategorySuggester:
         type_label = f"{families[0]['family']} + {families[1]['family']}" if mixed else families[0]["family"]
         t2 = time.perf_counter()
         notes = []
-        # "Unsure" follows the content type (the first row): Object / Scene / Event / Abstract concept.
+        # "Unsure" follows the content type (the first row): below the threshold, ask for human feedback.
         confidence = ranked[0]["score"] if ranked else 0.0
         type_confidence = families[0]["score"] if families else 0.0
         unsure = type_confidence < self.cfg.unsure_threshold
         if unsure:
-            notes.append(f"Unsure: the content type is only {type_confidence:.0%} certain, below the "
-                         f"{self.cfg.unsure_threshold:.0%} threshold. Treat the suggestions as guesses.")
+            notes.append(f"Unsure ({type_confidence:.0%} sure): human feedback is suggested.")
         elif confidence < self.cfg.unsure_threshold:
             notes.append(f"The content type is clear, but the specific categories below are low-confidence "
                          f"(best {confidence:.0%}). Adding a title usually helps.")

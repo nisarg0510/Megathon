@@ -11,6 +11,10 @@ from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
 
+# Presentation settings that never affect training or evaluation; a saved value is ignored.
+DISPLAY_ONLY = ("unsure_threshold",)
+
+
 @dataclass
 class Config:
     # Paths
@@ -61,7 +65,7 @@ class Config:
 
     # Presentation of suggestions
     hide_countries: bool = True  # do not show bare country / continent names (display only; evaluation keeps them)
-    unsure_threshold: float = 0.5  # content-type score below this marks the image "Unsure"
+    unsure_threshold: float = 0.4  # content-type score below this marks the image "Unsure" (human feedback suggested)
     center_focus: float = 0.4  # weight of the central-crop embedding for uploaded images (0 = off)
     center_crop: float = 0.6  # size of the central crop, as a fraction of width and height
     hide_specific: bool = True  # hide dated / people-count / non-Latin categories unless very sure
@@ -87,6 +91,8 @@ class Config:
     @classmethod
     def load(cls, path: str | Path, **overrides) -> "Config":
         raw = json.loads(Path(path).read_text())
+        for key in DISPLAY_ONLY:  # display settings follow the code, not the training run
+            raw.pop(key, None)
         known = {f.name for f in fields(cls)}
         cfg = cls(**{k: v for k, v in raw.items() if k in known})
         return cfg.update(**overrides)

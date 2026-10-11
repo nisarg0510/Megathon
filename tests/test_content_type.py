@@ -7,7 +7,7 @@ import train_content_type
 from wikicat.content_type import ContentTypeClassifier, commons_title, find_pack_file, load_pack, pack_scores
 from wikicat.families import FAMILIES, FamilyScorer
 
-COLOURS = {"Object": (200, 30, 30), "Living thing": (30, 160, 60), "Scene": (40, 70, 220)}
+COLOURS = {"Object": (200, 30, 30), "Living object": (30, 160, 60), "Scene": (40, 70, 220)}
 
 
 def make_images(folder, colour, n, rng):
@@ -30,11 +30,11 @@ def test_pack_scores_strict_and_lenient():
     rows = [{"primary": "objects", "accepted": {"objects"}, "confusing": False, "living": True, "group": "people"},
             {"primary": "scenes", "accepted": {"scenes", "objects"}, "confusing": True, "living": False, "group": ""}]
     probs = np.zeros((2, len(FAMILIES)))
-    probs[0, FAMILIES.index("Living thing")] = 1   # living thing counts as objects in four-family packs
+    probs[0, FAMILIES.index("Living object")] = 1   # living thing counts as objects in four-family packs
     probs[1, FAMILIES.index("Object")] = 1         # wrong primary, but an accepted alternative
     res = pack_scores(rows, probs)
     assert res["all"]["strict"] == 0.5 and res["all"]["lenient"] == 1.0
-    assert res["people_as_living_thing"] == 1.0 and res["confusing"]["n"] == 1
+    assert res["people_as_living_object"] == 1.0 and res["confusing"]["n"] == 1
 
 
 def test_train_and_evaluate_on_pack(tmp_path):
@@ -66,10 +66,10 @@ def test_train_and_evaluate_on_pack(tmp_path):
     from wikicat.encoder import HashingEncoder
 
     enc = HashingEncoder()
-    img = Image.open(data / "Living thing" / "0.png")
+    img = Image.open(data / "Living object" / "0.png")
     emb = enc.encode_images([img])[0]
     out = FamilyScorer(enc, classifier=clf).score(emb, [])
-    assert out[0]["family"] == "Living thing" and abs(sum(f["score"] for f in out) - 1) < 0.01
+    assert out[0]["family"] == "Living object" and abs(sum(f["score"] for f in out) - 1) < 0.01
 
 
 def test_pack_found_when_nested_or_zipped(tmp_path):
@@ -96,7 +96,7 @@ def test_pack_found_when_nested_or_zipped(tmp_path):
 def test_every_seed_gets_a_share(tmp_path, monkeypatch):
     import prepare_content_types as pct
 
-    seeds = {"Object": ["A", "B"], "Living thing": ["Cats", "Dogs", "Portrait photographs"]}
+    seeds = {"Object": ["A", "B"], "Living object": ["Cats", "Dogs", "Portrait photographs"]}
     calls = []
 
     def fake_crawl(client, seed_list, max_files=None, **kw):
@@ -119,3 +119,23 @@ def test_every_seed_gets_a_share(tmp_path, monkeypatch):
     assert dict(calls)["Portrait photographs"] == 10 and dict(calls)["A"] == 15
     manifest = json.loads((out / "manifest.json").read_text())
     assert len(manifest) == 1 + 30 + 30 and any(m["path"] == "old.jpg" for m in manifest)
+
+
+def test_legacy_living_thing_name_still_loads(tmp_path):
+    """Classifiers and training folders made before the rename to 'Living object' keep working."""
+    from wikicat.config import Config
+
+    clf = ContentTypeClassifier(np.eye(2, 4), np.zeros(2), ["Object", "Living thing"])
+    clf.save(tmp_path / "ct.npz")
+    loaded = ContentTypeClassifier.load(tmp_path / "ct.npz")
+    assert loaded.classes == ["Object", "Living object"]
+    assert loaded.predict_proba(np.array([0, 5.0, 0, 0]))[0].argmax() == FAMILIES.index("Living object")
+
+    rng = np.random.default_rng(1)
+    make_images(tmp_path / "data" / "Living thing", (30, 160, 60), 2, rng)
+    from wikicat.content_type import image_folder_dataset
+    assert image_folder_dataset(tmp_path / "data")[1] == ["Living object", "Living object"]
+
+    (tmp_path / "config.json").write_text(json.dumps({"unsure_threshold": 0.5, "knn_k": 25}))
+    cfg = Config.load(tmp_path / "config.json")
+    assert cfg.unsure_threshold == 0.4 and cfg.knn_k == 25  # display setting follows the code

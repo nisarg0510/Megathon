@@ -240,7 +240,7 @@ def test_living_things_and_contest_categories():
     from wikicat.families import family_of
 
     for name in ("Mushrooms", "Aquatic gilled mushrooms", "Birds of India", "Flowers in Kerala", "Cats", "Trees"):
-        assert family_of(name) == "Living thing", name
+        assert family_of(name) == "Living object", name
     for name in ("Fruits", "Power plants", "Fishing boats", "Bicycles", "Hot air balloons"):
         assert family_of(name) == "Object", name
     assert family_of("Farmers' markets") == "Scene" and family_of("Christmas trees") == "Event"

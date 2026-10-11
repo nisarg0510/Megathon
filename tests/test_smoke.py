@@ -63,7 +63,7 @@ def test_predict_returns_ranked_suggestions(built, capsys):
     if out["unsure"]:
         assert "+" not in out["type_label"]  # a single best guess when unsure
     assert all(s["score"] >= 0.7 for s in out["suggestions"] if "festival" in s["category"])  # dated ones hidden
-    assert out["unsure"] == (out["type_confidence"] < 0.5)
+    assert out["unsure"] == (out["type_confidence"] < 0.4)
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)
     sset = out["suggestion_set"]

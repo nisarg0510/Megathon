@@ -69,7 +69,7 @@ def main(argv=None) -> list[dict]:
     parser.add_argument("--device", default=None)
     parser.add_argument("--no-hierarchy", action="store_true", help="Disable ancestor suppression")
     parser.add_argument("--unsure-threshold", type=float, default=None,
-                        help="Mark the image Unsure when the content-type score is below this (default 0.5)")
+                        help="Mark the image Unsure when the content-type score is below this (default 0.4)")
     parser.add_argument("--alpha", dest="conformal_alpha", type=float, default=None,
                         help="Suggestion set error rate: the set holds a correct category with probability >= 1 - alpha")
     parser.add_argument("--show-specific", dest="hide_specific", action="store_false", default=None,

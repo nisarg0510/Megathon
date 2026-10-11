@@ -1,4 +1,4 @@
-"""Trained content-type classifier: Object / Living thing / Scene / Event / Abstract concept.
+"""Trained content-type classifier: Object / Living object / Scene / Event / Abstract concept.
 
 A multinomial logistic regression on frozen image embeddings, trained on
 openly licensed Wikimedia Commons photos collected per type (see
@@ -14,14 +14,14 @@ from urllib.parse import unquote
 
 import numpy as np
 
-from .families import FAMILIES
+from .families import FAMILIES, LEGACY_FAMILIES
 
 # Commons categories used to collect training photos for each type.
 TYPE_SEEDS = {
     "Object": ["Tools", "Furniture", "Bags", "Bottles", "Cups", "Chairs", "Clocks", "Bicycles", "Automobiles",
                "Musical instruments", "Toys", "Shoes", "Computers", "Lamps", "Books", "Food", "Statues", "Vases"],
     # People are living things; they get a third of the type so portraits and group photos are not read as events.
-    "Living thing": ["Cats", "Dogs", "Birds", "Insects", "Flowers", "Trees", "Mushrooms", "Horses", "Fish",
+    "Living object": ["Cats", "Dogs", "Birds", "Insects", "Flowers", "Trees", "Mushrooms", "Horses", "Fish",
                      "Reptiles", "Butterflies", "Cattle", "Portrait photographs", "Smiling people",
                      "Group photographs", "Portrait photographs of men", "Portrait photographs of women",
                      "Cartes de visite", "Selfies"],
@@ -34,7 +34,7 @@ TYPE_SEEDS = {
 }
 
 # Test packs use four broad families; living things count as objects there.
-TO_FOUR = {"Object": "objects", "Living thing": "objects", "Scene": "scenes", "Event": "events",
+TO_FOUR = {"Object": "objects", "Living object": "objects", "Scene": "scenes", "Event": "events",
            "Abstract concept": "abstract concepts"}
 IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -43,7 +43,7 @@ class ContentTypeClassifier:
     def __init__(self, coef: np.ndarray, intercept: np.ndarray, classes: list[str], model_name: str = ""):
         self.coef = np.asarray(coef, dtype=np.float32)
         self.intercept = np.asarray(intercept, dtype=np.float32)
-        self.classes = list(classes)
+        self.classes = [LEGACY_FAMILIES.get(c, c) for c in classes]
         self.model_name = model_name
 
     @classmethod
@@ -78,15 +78,16 @@ class ContentTypeClassifier:
 
 
 def image_folder_dataset(root: str | Path) -> tuple[list[str], list[str]]:
-    """Images under root/<Type name>/... (any depth). Folder names must match FAMILIES."""
+    """Images under root/<Type name>/... (any depth). Folder names must match FAMILIES (or a legacy name)."""
     paths, labels = [], []
     for family in FAMILIES:
-        folder = Path(root) / family
-        if folder.is_dir():
-            for p in sorted(folder.rglob("*")):
-                if p.suffix.lower() in IMAGE_EXT:
-                    paths.append(str(p))
-                    labels.append(family)
+        names = [family] + [old for old, new in LEGACY_FAMILIES.items() if new == family]
+        for folder in (Path(root) / n for n in names):
+            if folder.is_dir():
+                for p in sorted(folder.rglob("*")):
+                    if p.suffix.lower() in IMAGE_EXT:
+                        paths.append(str(p))
+                        labels.append(family)
     return paths, labels
 
 
@@ -163,13 +164,13 @@ def pack_scores(rows: list[dict], probs: np.ndarray) -> dict:
         }
     living = [i for i, r in enumerate(rows) if r["living"]]
     if living:
-        res["living_as_living_thing"] = float(np.mean([pred[i] == "Living thing" for i in living]))
+        res["living_as_living_object"] = float(np.mean([pred[i] == "Living object" for i in living]))
         people = [i for i in living if rows[i]["group"] == "people"]
         if people:
-            res["people_as_living_thing"] = float(np.mean([pred[i] == "Living thing" for i in people]))
+            res["people_as_living_object"] = float(np.mean([pred[i] == "Living object" for i in people]))
         groups = sorted({rows[i]["group"] for i in living if rows[i]["group"]})
         res["living_by_group"] = {g: {"n": sum(rows[i]["group"] == g for i in living),
-                                      "as_living_thing": float(np.mean([pred[i] == "Living thing" for i in living
+                                      "as_living_object": float(np.mean([pred[i] == "Living object" for i in living
                                                                          if rows[i]["group"] == g]))}
                                   for g in groups}
     res["predicted"] = {f: pred.count(f) for f in FAMILIES}

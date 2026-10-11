@@ -46,11 +46,9 @@ def _thumb(ev: dict):
 def unsure_banner(result: dict) -> str:
     if not result.get("unsure"):
         return ""
-    best = result["type_label"]
     return ("<div style='padding:12px 16px;border-radius:8px;background:#fff4e5;color:#7a4100;"
             "border:1px solid #f0b46c;font-size:1.15em;font-weight:600'>"
-            f"⚠ Unsure: the content type is only {result['type_confidence']:.0%} certain "
-            f"(best guess: {best}). Treat the suggestions below as guesses.</div>")
+            f"⚠ Unsure ({result['type_confidence']:.0%} sure): human feedback is suggested.</div>")
 
 
 def summarise(result: dict, title: str, description: str) -> dict:
@@ -235,7 +233,7 @@ def main() -> None:
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
-                        help="Mark the image Unsure when the content-type score is below this (default 0.5)")
+                        help="Mark the image Unsure when the content-type score is below this (default 0.4)")
     parser.add_argument("--alpha", dest="conformal_alpha", type=float, default=None,
                         help="Suggestion set error rate: the set holds a correct category with probability >= 1 - alpha")
     args = parser.parse_args()
