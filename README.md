@@ -133,6 +133,7 @@ Large files are not stored in this repository.
 | Encoder weights | downloaded automatically from Hugging Face, e.g. [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) | Hugging Face cache |
 | Built index (`artifacts.zip`) | _link to be added_ | unzip to `artifacts/`, then run steps 4–5 directly |
 | Crawled dataset (`data.zip`) | _link to be added_ | unzip to `data/`, needed for steps 2–3 |
+| Demo video (4 min) | _link to be added_ | — |
 
 ## Tests
 
