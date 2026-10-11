@@ -50,7 +50,7 @@ def main() -> int:
     for rel in tracked:
         path = root / rel
         parts = set(Path(rel).parts[:-1])
-        if parts & FORBIDDEN_DIRS:
+        if parts & FORBIDDEN_DIRS or any(d.startswith(("data_", "artifacts_", "results_")) for d in parts):
             errors.append(f"tracked file in excluded directory: {rel}")
         if Path(rel).suffix.lower() in FORBIDDEN_EXT:
             errors.append(f"tracked data/weight file: {rel}")

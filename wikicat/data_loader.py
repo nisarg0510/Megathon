@@ -15,11 +15,14 @@ import csv
 import html
 import json
 import logging
+import math
 import os
+import random
 import re
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -264,6 +267,59 @@ class CommonsClient:
                 if rec is not None:
                     records.setdefault(rec["id"], rec)
             log.info("random sample: %d usable files", len(records))
+        return list(records.values())[:n]
+
+    def recent_files(self, n: int, newest_days: float = 7, oldest_days: float = 30, points: int = 25,
+                     per_uploader: int = 5, thumb_width: int = 330, seed: int = 0) -> list[dict]:
+        """Files uploaded between `oldest_days` and `newest_days` ago, with their visible categories.
+
+        The deployment distribution: what the system would actually be asked about. Files are taken
+        from `points` random moments in the window (consecutive uploads are often one batch) with at
+        most `per_uploader` files per uploader. The newest week is skipped so that editors have had
+        time to categorise the files.
+        """
+        rng = random.Random(seed)
+        now = datetime.now(timezone.utc)
+        starts = sorted((now - timedelta(days=rng.uniform(newest_days, oldest_days)) for _ in range(points)),
+                        reverse=True)
+        per_point = math.ceil(n / points)
+        records: dict[str, dict] = {}
+        per_user: Counter = Counter()
+        for start in starts:
+            params = {
+                "generator": "allimages",
+                "gaisort": "timestamp",
+                "gaidir": "older",
+                "gaistart": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "gailimit": 50,
+                "prop": "imageinfo|categories",
+                "iiprop": "url|timestamp|user|size|mime|extmetadata",
+                "iiurlwidth": thumb_width,
+                "iiextmetadatafilter": "ImageDescription|DateTimeOriginal",
+                "iiextmetadatalanguage": "en",
+                "clshow": "!hidden",
+                "cllimit": "max",
+            }
+            pages: dict[int, dict] = {}
+            for data in self.query(params):
+                for page in data.get("query", {}).get("pages", []):
+                    merged = pages.setdefault(page["pageid"], {"title": page["title"], "categories": []})
+                    if page.get("imageinfo"):
+                        merged["imageinfo"] = page["imageinfo"][0]
+                    merged["categories"].extend(c["title"] for c in page.get("categories", []))
+                if len(pages) >= per_point * 4 and "clcontinue" not in data.get("continue", {}):
+                    break
+            taken = 0
+            for pageid, page in pages.items():
+                rec = _page_to_record(pageid, page, seed="recent")
+                if rec is None or rec["id"] in records or per_user[rec["uploader"]] >= per_uploader:
+                    continue
+                records[rec["id"]] = rec
+                per_user[rec["uploader"]] += 1
+                taken += 1
+                if taken >= per_point:
+                    break
+            log.info("recent uploads before %s: %d usable files", start.date(), len(records))
         return list(records.values())[:n]
 
     def category_parents(self, categories: list[str]) -> dict[str, list[str]]:

@@ -275,7 +275,8 @@ def main(argv=None) -> dict:
     groups: dict[str, list[int]] = defaultdict(list)
     for i, r in enumerate(records):
         seed = r.get("seed", "")
-        groups["random sample" if seed == "random" else seed_group.get(seed, "other")].append(i)
+        name = {"random": "random sample", "recent": "newest uploads"}.get(seed) or seed_group.get(seed, "other")
+        groups[name].append(i)
     res["seed_groups"] = {}
     for g, idx in sorted(groups.items(), key=lambda kv: -len(kv[1])):
         if len(idx) >= args.min_group:

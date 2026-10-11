@@ -9,6 +9,7 @@ Examples
     python prepare_data.py hierarchy --depth 2
     python prepare_data.py split --val-frac 0.15 --test-frac 0.15
     python prepare_data.py import --table my_dataset.csv --image-root /path/to/images
+    python prepare_data.py --data-dir data_recent recent --n 500     # test set of the newest uploads
 """
 from __future__ import annotations
 
@@ -80,6 +81,23 @@ def cmd_import(args) -> None:
     log.info("Imported %d records", len(records))
 
 
+def cmd_recent(args) -> None:
+    """Test set of files uploaded 7-30 days ago: later than every training image, never seen in training."""
+    known = set()
+    main = records_path(Path(args.exclude_from))
+    if main.exists():
+        known = {r["id"] for r in dl.load_records(main)}
+    records = dl.CommonsClient().recent_files(args.n, args.newest_days, args.oldest_days,
+                                              per_uploader=args.per_uploader, thumb_width=args.thumb_width)
+    skipped = sum(r["id"] in known for r in records)
+    records = [r for r in records if r["id"] not in known]
+    records = dl.download_images(records, args.data_dir / "images", workers=args.workers)
+    records = [dict(r, split="test") for r in records if r.get("image_path")]
+    dl.save_records(records, records_path(args.data_dir))
+    log.info("Saved %d recent uploads to %s (%d already in %s were skipped)", len(records),
+             records_path(args.data_dir), skipped, main)
+
+
 def cmd_all(args) -> None:
     cmd_crawl(args)
     cmd_download(args)
@@ -127,6 +145,15 @@ def main() -> None:
     p.add_argument("--table", required=True, help="CSV or JSONL with image_path and categories")
     p.add_argument("--image-root", default=None)
     p.set_defaults(func=cmd_import)
+    p = sub.add_parser("recent", help="Test set of the newest Commons uploads")
+    p.add_argument("--n", type=int, default=500)
+    p.add_argument("--newest-days", type=float, default=7, help="Skip uploads newer than this (not yet categorised)")
+    p.add_argument("--oldest-days", type=float, default=30)
+    p.add_argument("--per-uploader", type=int, default=5)
+    p.add_argument("--thumb-width", type=int, default=330)
+    p.add_argument("--exclude-from", default="data", help="Dataset whose files must not appear in this test set")
+    download_args(p)
+    p.set_defaults(func=cmd_recent)
     p = sub.add_parser("all")
     crawl_args(p); download_args(p); hierarchy_args(p); split_args(p)
     p.set_defaults(func=cmd_all)

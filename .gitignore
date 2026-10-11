@@ -12,9 +12,12 @@ env/
 
 # Data, caches and model artifacts (hosted externally, never committed)
 data/
+data_*/
 datasets/
 artifacts/
+artifacts_*/
 results/
+results_*/
 feedback/
 content_type_data/
 *.bin
