@@ -32,6 +32,41 @@ FAMILY_PROMPTS = {
 }
 
 
+# What the main subject is, used to adjust how the content type is shown: people are rarely the
+# "type" an editor wants (a parade is an Event, a selfie at a beach a Scene), and statues are not alive.
+SUBJECT_PROMPTS = {
+    "person": ["a photo of a person", "a photo of people", "a selfie", "a portrait photo of a person",
+               "a group of people posing"],
+    "animal or plant": ["a photo of an animal", "a photo of a bird", "a photo of an insect",
+                        "a photo of a plant or flower", "a photo of a mushroom"],
+    "statue": ["a photo of a statue", "a photo of a sculpture", "a bronze statue of a person",
+               "a stone statue of an animal", "a monument with a statue"],
+    "other": ["a photo of a building", "a photo of a landscape", "a photo of an object", "an abstract pattern",
+              "a photo of a street"],
+}
+
+
+def adjust_for_subject(families: list[dict], subject: dict[str, float]) -> tuple[list[dict], str]:
+    """Statues are never living; when people are the main subject, the type of the scene leads and
+    Living object comes second. Returns the families and 'statue', 'people' or ''."""
+    scores = {f["family"]: f["score"] for f in families}
+    living = scores.get("Living object", 0.0)
+    if subject.get("statue", 0) >= 0.5 and subject["statue"] > subject.get("person", 0):
+        scores["Object"] = scores.get("Object", 0.0) + living
+        scores["Living object"] = 0.0
+        order = sorted(scores, key=lambda f: -scores[f])
+        return [{"family": f, "score": round(scores[f], 3)} for f in order], "statue"
+    if subject.get("person", 0) >= 0.5 and families and families[0]["family"] == "Living object":
+        rest = {f: v for f, v in scores.items() if f != "Living object"}
+        total = sum(rest.values()) or 1.0
+        order = sorted(rest, key=lambda f: -rest[f])
+        out = [{"family": order[0], "score": round(rest[order[0]] / total, 3)},
+               {"family": "Living object", "score": round(living, 3)}]
+        out += [{"family": f, "score": round(rest[f] / total, 3)} for f in order[1:]]
+        return out, "people"
+    return families, ""
+
+
 def family_of(category: str) -> str:
     return _TYPE_TO_FAMILY[category_type(category)]
 
@@ -49,6 +84,15 @@ class FamilyScorer:
         self.temperature = temperature
         emb = np.stack([encoder.encode_texts(FAMILY_PROMPTS[f]).mean(axis=0) for f in FAMILIES])
         self.prototypes = emb / np.maximum(np.linalg.norm(emb, axis=1, keepdims=True), 1e-12)
+        sub = np.stack([encoder.encode_texts(v).mean(axis=0) for v in SUBJECT_PROMPTS.values()])
+        self.subject_prototypes = sub / np.maximum(np.linalg.norm(sub, axis=1, keepdims=True), 1e-12)
+
+    def subject(self, img_emb: np.ndarray) -> dict[str, float]:
+        """Zero-shot probabilities that the main subject is a person, an animal or plant, a statue or other."""
+        logits = (self.subject_prototypes @ img_emb.astype(np.float32)) / self.temperature
+        p = np.exp(logits - logits.max())
+        p /= p.sum()
+        return dict(zip(SUBJECT_PROMPTS, p.round(3).tolist()))
 
     def zero_shot(self, img_emb: np.ndarray) -> np.ndarray:
         logits = (self.prototypes @ img_emb.astype(np.float32)) / self.temperature

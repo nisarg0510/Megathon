@@ -262,3 +262,18 @@ def test_broad_category_scorer_ranks_a_short_list():
     assert top[0]["score"] >= top[1]["score"] and abs(sum(b["score"] for b in scorer.top(target, k=len(BROAD_CATEGORIES))) - 1) < 0.01
     assert len(set(BROAD_CATEGORIES)) == len(BROAD_CATEGORIES)
     assert np.allclose(np.linalg.norm(scorer.prototypes, axis=1), 1, atol=1e-5)
+
+
+def test_people_lead_with_scene_type_and_statues_are_not_living():
+    from wikicat.families import adjust_for_subject
+
+    fam = [{"family": "Living object", "score": 0.6}, {"family": "Event", "score": 0.25},
+           {"family": "Scene", "score": 0.1}, {"family": "Object", "score": 0.05}, {"family": "Abstract concept", "score": 0.0}]
+    out, kind = adjust_for_subject(fam, {"person": 0.8, "statue": 0.1, "animal or plant": 0.05, "other": 0.05})
+    assert kind == "people" and out[0]["family"] == "Event" and out[1]["family"] == "Living object"
+    assert abs(out[0]["score"] - 0.625) < 1e-3
+    out, kind = adjust_for_subject(fam, {"person": 0.2, "statue": 0.7, "animal or plant": 0.05, "other": 0.05})
+    assert kind == "statue" and out[0]["family"] == "Object" and out[0]["score"] == 0.65
+    assert [f for f in out if f["family"] == "Living object"][0]["score"] == 0
+    out, kind = adjust_for_subject(fam, {"person": 0.1, "statue": 0.1, "animal or plant": 0.7, "other": 0.1})
+    assert kind == "" and out == fam  # a real animal or plant stays a Living object

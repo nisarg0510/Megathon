@@ -289,7 +289,9 @@ photo labelled with a photographer's collection) added a broad-category row and 
 container categories (``X by Y''), counts and country-level variants unless the title names the country.
 A single person was matched to ``Holi'' because most people photos in our index came from that festival.
 After evaluation, about 500 openly licensed portraits, selfies and group photos were added to the demo
-index without retraining (continual learning); all reported numbers predate this.
+index without retraining (continual learning); all reported numbers predate this. In the final round,
+testers asked that people not be the ``type'' of a photo and that statues not count as alive: a zero-shot
+subject check now leads with the scene's type (e.g.\ Event + Living object) and types statues as Objects.
 
 \section{Responsible Use and Licensing}
 Only openly licensed Commons files are used for training and indexing, and each keeps its licence.
@@ -303,18 +305,14 @@ Each result starts with a {\color{accent}$\star$} row giving the content type (o
 market is Object + Scene) and, below 40\%, a one-line \emph{Unsure} notice suggesting human feedback; then a broad category
 (e.g.\ Automobiles) from a zero-shot match against about a hundred broad Commons categories. Suggestions follow with
 their score; rows marked \checkmark\ form the conformal set, and notes explain abstention, a missing title
-or a low-quality image. For every suggestion the demo shows the indexed images that voted for it and the
-signals behind its score. Editors can accept or reject suggestions and add new categories; testers can
-report a problem, which is stored with what the system showed. A public read-only mode hides the editing
-panels.
+or a low-quality image. Each suggestion shows the indexed images that voted for it; editors can accept,
+reject or add categories, and testers can report a problem. A public read-only mode hides editing.
 
 \section{Deployment and Scalability}
-The encoder is frozen, so no GPU training is needed and a new deployment only builds an index. Scoring
-and ranking take 1\,ms per image after encoding; the index is a FAISS flat, HNSW or IVF-PQ index chosen by
-configuration, and candidates keep fusion independent of the number of categories. On Commons the
-system would run asynchronously on upload events and store suggestions with their evidence for editors;
-nothing blocks or changes an upload. New categories, new images and editor decisions take effect
-immediately; the fusion model and conformal thresholds are refitted periodically on recent uploads.
+The encoder is frozen, so a deployment only builds an index; scoring and ranking take 1\,ms per image, the
+FAISS index (flat, HNSW or IVF-PQ) is set by configuration, and fusion only sees a few hundred candidates.
+On Commons it would run asynchronously on upload events and store suggestions with their evidence for
+editors, never blocking an upload; fusion and conformal thresholds are refitted periodically.
 
 \section{Reproducibility}
 Every number comes from the repository's scripts with a fixed seed; the README lists the commands, the
