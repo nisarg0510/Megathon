@@ -38,6 +38,31 @@ a frozen vision--language encoder, several complementary scorers, calibrated fus
 decoding, and conformal suggestion sets, with evidence shown for every suggestion and an editor always in
 the loop. Nothing is applied automatically.
 
+\section{What Makes the Difference}
+\begin{itemize}
+\item \textbf{Open vocabulary by design (M1).} Categories are \emph{retrieved}, not classified: a category
+is suggestible the moment it is named, and new images or editor decisions count immediately, with no
+retraining.
+\item \textbf{Many weak signals, one calibrated score (M1).} Five complementary scorers are fused on a few
+hundred candidates, never on all categories: +53\% F1@5 over the best single scorer.
+\item \textbf{Missing labels are not punished (M1).} Unlabelled parents of true categories are left out of
+fusion training instead of counted as negatives, the head uses an asymmetric loss, and decoding is
+hierarchy-aware; hierarchy-aware precision is reported next to strict precision.
+\item \textbf{Honest about uncertainty (M1, built for the final).} An \emph{Unsure} flag from the content
+type, and conformal suggestion sets that send an upload to manual categorisation instead of guessing.
+\item \textbf{Explainable (M1).} Every suggestion shows the indexed images that voted for it and the
+signals behind its score, in line with Wikimedia's transparency principle.
+\item \textbf{Evaluation that matches deployment (M2).} Temporal split, de-duplication and a vocabulary
+built only from earlier data cut the validation--test gap from .135 to .014; balanced and uniformly random
+samples allow a bias audit.
+\item \textbf{Robust to real uploads (M2).} Fusion is trained on copies without titles and with degraded
+images: heavy blur costs 5\% F1@5 with a title.
+\item \textbf{Built with testers (M2, final).} Hands-on testing and public tester reports drove more
+than ten fixes, from centre weighting to a fifth content type, Living thing.
+\item \textbf{Open and licence-clean.} Frozen open-weight encoder, MIT code, openly licensed training data
+only; it runs on a laptop.
+\end{itemize}
+
 \begin{figure*}[t]
 \centering
 \resizebox{\textwidth}{!}{%
@@ -65,9 +90,7 @@ accept/reject decisions and new categories update the index and vocabulary witho
 \end{figure*}
 
 \section{System}
-\textbf{Flow:} upload $\rightarrow$ frozen CLIP ViT-B/32 (SigLIP supported) $\rightarrow$ scorers on a
-candidate union $\rightarrow$ fusion $\rightarrow$ hierarchy decoding $\rightarrow$ conformal set or
-abstention $\rightarrow$ content type, filters and evidence $\rightarrow$ editor review.
+Figure~1 shows the pipeline; the encoder is frozen CLIP ViT-B/32 (SigLIP is supported).
 \begin{itemize}
 \item \textbf{Encoder:} L2-normalised embeddings; uploads add a 0.4-weighted embedding of the central 60\%
 crop, so the main subject outweighs the background.
@@ -91,8 +114,6 @@ country names, and over-specific categories (dates, people counts, non-Latin scr
 is at least 70\%; evaluation scores the model before these display filters.
 \item \textbf{Continual learning:} new categories are suggestible immediately (text prototype, word
 match), new images are appended to the index, and editor accept/reject feeds back without retraining.
-\item \textbf{Demo:} web UI with evidence images, a public read-only mode and a problem-report form whose
-reports are de-duplicated and summarised for triage.
 \end{itemize}
 
 \section{Data and Protocol}
@@ -106,23 +127,25 @@ categories at test time; the validation--test F1@5 gap is .014, so validation is
 vocabulary at all, which bounds recall. Encoder: CLIP ViT-B/32; $K{=}50$, $\tau$ tuned on validation.
 
 \section{Results}
-\subsection{Main results (937 test images)}
+\subsection{Main results and progression}
 {\small\centering
-\begin{tabular}{@{}lrrrr@{}}
+\begin{tabular}{@{}lrrrrr@{}}
 \toprule
- & \multicolumn{2}{c}{\textbf{image + metadata}} & \multicolumn{2}{c}{\textbf{image only}} \\
- & M2 & \textbf{Final} & M2 & \textbf{Final} \\ \midrule
-P@1 & .350 & .348 & -- & .188 \\
-F1@1 & .237 & .234 & -- & .118 \\
-F1@5 & .153 & .152 & .084 & .085 \\
-R@10 & .330 & .336 & -- & .193 \\
-Hierarchy-aware P@5 & -- & .234 & -- & .121 \\
-mAP (macro) & -- & .121 & -- & -- \\ \bottomrule
+\textbf{Test} & \multicolumn{4}{c}{\textbf{image + metadata}} & \textbf{image} \\
+ & Run 1 & Run 2 & M2 & \textbf{Final} & \textbf{only} \\ \midrule
+Test images & 190 & 510 & 937 & 937 & 937 \\
+P@1 & .284 & .339 & .350 & .348 & .188 \\
+F1@1 & .148 & .199 & .237 & .234 & .118 \\
+F1@5 & .119 & .160 & .153 & .152 & .085 \\
+R@10 & .238 & .310 & .330 & .336 & .193 \\
+Hierarchy-aware P@5 & -- & -- & -- & .234 & .121 \\
+mAP (macro) & -- & -- & -- & .121 & -- \\ \bottomrule
 \end{tabular}\par}
 
 \vspace{2pt}
-Accuracy is unchanged from M2 while the system gained conformal sets, the trained content type and
-smoothed prototypes. About one in three uploads with a title gets a correct category in first place, and 64\%
+Run 1$\rightarrow$2 added images per category; Run 2$\rightarrow$M2 made validation realistic and added
+balanced and random samples (a harder, more honest test); the final system adds conformal sets, the trained
+content type and smoothed prototypes. Accuracy holds at the M2 level with these additions. About one in three uploads with a title gets a correct category in first place, and 64\%
 of in-vocabulary uploads get one in the top 10. Hierarchy-aware P@5 (.234) is double strict P@5 (.116):
 many ``wrong'' suggestions are a parent or child of a true category, which an editor would often accept.
 The tuned hierarchy decoding leaves F1@5 unchanged (.152 with and without).
