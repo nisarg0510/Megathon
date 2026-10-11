@@ -65,10 +65,7 @@ Writes everything needed for inference to `artifacts/`. Useful options:
 | `--device` | `cpu`, `cuda`, `mps` (default: auto) |
 | `--index-type` | `flat` (default), `HNSW32`, `IVF1024,PQ64` |
 | `--artifacts-dir` | `artifacts_siglip` (keep several models side by side) |
-| `--no-graph-smoothing` | plain text prototypes, for the ablation: `python train.py --no-graph-smoothing --artifacts-dir artifacts_text` |
-
-Training also chooses how category prototypes are smoothed (text, image centroid, parent and sibling categories) and
-calibrates the conformal suggestion sets; both choices are in `artifacts/train_report.json`.
+| `--no-graph-smoothing` | `python train.py --no-graph-smoothing --artifacts-dir artifacts_text` |
 
 ### 2b. Train the content-type classifier (Object / Living object / Scene / Event / Abstract concept)
 
@@ -78,7 +75,7 @@ python train_content_type.py --eval-pack path/to/photo-test-pack --eval-pack pat
 ```
 
 Writes `artifacts/content_type.npz`, which `predict.py` and `app.py` use automatically. Extra images can be added
-under `content_type_data/<Type>/`. Test packs are only evaluated on, never trained on.
+under `content_type_data/<Type>/`.
 
 ### 3. Evaluate
 
@@ -87,6 +84,10 @@ python evaluate.py --split test
 python evaluate.py --split test --k 1 3 5 10 --degrade blur:2,jpeg:10,downscale:0.15 --latency 50
 python evaluate.py --center-focus 0.4                 # evaluate with centre-focused embeddings
 python evaluate.py --artifacts-dir artifacts_text --out results_text --degrade "" --latency 0   # ablation run
+
+# test set of the newest Commons uploads
+python prepare_data.py --data-dir data_recent recent --n 500
+python evaluate.py --data-dir data_recent --split test --out results_recent --degrade "" --latency 0
 ```
 
 Writes `results/metrics_test.json` and `results/report_test.md`.
@@ -124,16 +125,15 @@ python update.py add-images --records data/new_uploads.jsonl
 python update.py feedback photo.jpg --accept "Lighthouses in Kerala" --reject "Churches"
 ```
 
-## Prebuilt artifacts and data
+## External data and model weights
 
 Large files are not stored in this repository.
 
-| item | link | where to put it |
-|---|---|---|
-| Encoder weights | downloaded automatically from Hugging Face, e.g. [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) | Hugging Face cache |
-| Built index (`artifacts.zip`) | _link to be added_ | unzip to `artifacts/`, then run steps 4–5 directly |
-| Crawled dataset (`data.zip`) | _link to be added_ | unzip to `data/`, needed for steps 2–3 |
-| Demo video (4 min) | _link to be added_ | — |
+| item | where it comes from |
+|---|---|
+| Encoder weights | downloaded automatically from Hugging Face on first use, e.g. [openai/clip-vit-base-patch32](https://huggingface.co/openai/clip-vit-base-patch32) |
+| Dataset (`data/`) | built by step 1 from [Wikimedia Commons](https://commons.wikimedia.org) |
+| Built index (`artifacts/`) | built by step 2 (and 2b) |
 
 ## Tests
 
