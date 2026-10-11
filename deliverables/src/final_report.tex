@@ -1,0 +1,219 @@
+\documentclass[10pt,twocolumn]{article}
+\usepackage[a4paper,margin=1.5cm,columnsep=0.6cm]{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{microtype}
+\usepackage{amssymb}
+\setlist{nosep,leftmargin=1.1em}
+\titleformat{\section}{\normalsize\bfseries}{\thesection.}{0.4em}{}
+\titlespacing*{\section}{0pt}{5pt}{2pt}
+\titleformat{\subsection}{\small\bfseries}{\thesubsection}{0.4em}{}
+\titlespacing*{\subsection}{0pt}{3pt}{1pt}
+\setlength{\parskip}{1.5pt}
+\setlength{\parindent}{0pt}
+\setlength{\tabcolsep}{3.2pt}
+\pagestyle{plain}
+
+\title{\vspace{-1.4cm}\textbf{CommonsLens: Automatic Category Suggestions for Wikimedia Commons}\\
+\large Final Report\vspace{-0.25cm}}
+\author{TEAM-89\\\small Hackathon Problem Statement 3}
+\date{\vspace{-0.9cm}}
+
+\begin{document}
+\maketitle
+
+\section{Problem and Approach}
+Categories are how files on Wikimedia Commons are found, but many uploads arrive with few or none, and
+editors must choose from a huge, growing, long-tailed category graph. A fixed classifier fits poorly: the
+label space changes daily, most categories have a handful of examples, labels are incomplete (a missing
+category is not a negative), and editors need to know \emph{why} a category is suggested and \emph{when}
+the system is unsure. CommonsLens treats categories as retrievable objects in a shared image--text space:
+a frozen vision--language encoder, several complementary scorers, calibrated fusion, hierarchy-aware
+decoding, and conformal suggestion sets, with evidence shown for every suggestion and an editor always in
+the loop. Nothing is applied automatically.
+
+\section{System}
+\textbf{Flow:} upload $\rightarrow$ frozen CLIP ViT-B/32 (SigLIP supported) $\rightarrow$ scorers on a
+candidate union $\rightarrow$ fusion $\rightarrow$ hierarchy decoding $\rightarrow$ conformal set or
+abstention $\rightarrow$ content type, filters and evidence $\rightarrow$ editor review.
+\begin{itemize}
+\item \textbf{Encoder:} L2-normalised embeddings; uploads add a 0.4-weighted embedding of the central 60\%
+crop, so the main subject outweighs the background.
+\item \textbf{Scorers:} (1) $k$NN voting over indexed images, softmax($s/\tau$), editor rejections as
+negative votes; (2) text prototypes from prompt ensembles; (3) \emph{smoothed prototypes} (text embedding
+blended with the image centroid, $w{=}n/(n{+}5)$; parent/sibling term tested, Section~4.2); (4) a
+text-initialised linear head with asymmetric loss for categories with $\geq$3 images; (5) metadata:
+title/description embedding, IDF word overlap, year agreement.
+\item \textbf{Fusion:} logistic regression over 17 features on the union of each scorer's top 100,
+fitted on validation plus copies with metadata removed (30\%) or images degraded (30\%).
+\item \textbf{Hierarchy decoding:} an ancestor is pushed down when a descendant is confident; the strength
+is tuned on validation.
+\item \textbf{Conformal suggestion sets:} split conformal calibration on validation, separately for uploads
+with and without metadata. Members are marked \checkmark; an empty set means ``manual categorisation
+recommended''. $\alpha$ is the smallest value whose median set stays $\leq$10.
+\item \textbf{Content type first:} Object / Living thing / Scene / Event / Abstract concept, from a
+classifier on frozen embeddings (939 openly licensed Commons photos, equal share per source category)
+blended with a vote of the suggestions; ``Unsure'' below 50\%, two types shown when close.
+\item \textbf{Filters:} maintenance and contest categories are never suggested. The display hides bare
+country names, and over-specific categories (dates, people counts, non-Latin script) unless their score
+is at least 70\%; evaluation scores the model before these display filters.
+\item \textbf{Continual learning:} new categories are suggestible immediately (text prototype, word
+match), new images are appended to the index, and editor accept/reject feeds back without retraining.
+\item \textbf{Demo:} web UI with evidence images, a public read-only mode and a problem-report form whose
+reports are de-duplicated and summarised for triage.
+\end{itemize}
+
+\section{Data and Protocol}
+6,303 files from the MediaWiki API: 155 seed categories (107 topical; 48 for regional balance, 8
+countries per continent) plus 1,500 uniformly random files. Hidden and maintenance categories are
+removed. \textbf{Temporal split} by upload time (4,429 / 937 / 937), perceptual-hash and embedding
+($\cos\geq0.95$) de-duplication. \textbf{Realistic validation:} the vocabulary is built from training
+data (plus seeds and parents) only; validation categories are added after fusion is fitted, giving 24,486
+categories at test time. 72\% of test labels belong to categories with no training image, and only 36\%
+of test labels are in the vocabulary at all, which bounds recall.
+
+\section{Results}
+\subsection{Main results (937 test images)}
+{\small\centering
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+ & \multicolumn{2}{c}{\textbf{image + metadata}} & \multicolumn{2}{c}{\textbf{image only}} \\
+ & M2 & \textbf{Final} & M2 & \textbf{Final} \\ \midrule
+P@1 & .350 & .348 & -- & .188 \\
+F1@1 & .237 & .234 & -- & .118 \\
+F1@5 & .153 & .152 & .084 & .085 \\
+R@10 & .330 & .336 & -- & .193 \\
+Hierarchy-aware P@5 & -- & .234 & -- & .121 \\
+mAP (macro) & -- & .121 & -- & -- \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{2pt}
+Accuracy is unchanged from M2 while the system gained conformal sets, the trained content type and
+smoothed prototypes. About one in three uploads with a title gets a correct category in first place, and 64\%
+of in-vocabulary uploads get one in the top 10.
+
+\vspace{3pt}
+{\small\centering
+\begin{tabular}{@{}lrr@{\hspace{10pt}}lrr@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textbf{Ablation (+meta)}} & \multicolumn{3}{l@{}}{\textbf{Recall@5 by frequency}} \\
+Ranking & F1@5 & R@10 & Bucket & labels & R \\ \midrule
+Full fusion & \textbf{.152} & \textbf{.336} & unseen & 2412 & .003 \\
+\quad w/o smoothed & .152 & .330 & tail 1--4 & 318 & .200 \\
+Lexical only & .099 & .202 & torso 5--19 & 217 & .439 \\
+Smoothed only & .083 & .191 & head 20+ & 380 & .821 \\
+Head only & .070 & .172 & & & \\
+$k$NN only & .069 & .158 & & & \\
+Meta text only & .052 & .170 & & & \\
+Text proto only & .005 & .020 & & & \\ \bottomrule
+\end{tabular}\par}
+
+\subsection{Smoothed prototypes (M1's core idea)}
+{\small\centering
+\begin{tabular}{@{}lrr@{\hspace{10pt}}lrr@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textbf{Validation, prototype only}} & \multicolumn{3}{l@{}}{\textbf{Test, R@10 by bucket}} \\
+Setting & R@10 & tail & Bucket & text & smoothed \\ \midrule
+Text only & .061 & .061 & all & .020 & \textbf{.191} \\
+Text + graph & .049 & .053 & tail & \textbf{.050} & .025 \\
+\textbf{Text + images} & \textbf{.223} & .061 & torso & .055 & \textbf{.240} \\
+\quad + graph ($\gamma{=}.3$) & .221 & .045 & head & .053 & \textbf{.797} \\
+\quad + graph ($\gamma{=}.6$) & .213 & .030 & & & \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{2pt}
+Image centroids make the prototype scorer nearly ten times stronger on its own (.020$\rightarrow$.191), but the
+full system does not change because $k$NN and the head already carry the same evidence. The parent/sibling
+term, M1's hypothesis for the tail, \emph{lowered} tail recall on validation, so it was not selected:
+siblings in the Commons graph often look nothing alike. A first version that \emph{replaced} the text
+prototypes broke title matching, which compares text with text (metadata-text-only F1@5 .052$\rightarrow$.007),
+so the smoothed set is now a separate signal.
+
+\subsection{Conformal suggestion sets}
+{\small\centering
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{With metadata} & target & cover. & mean & median & abstain \\ \midrule
+$\alpha{=}0.3$ & .70 & .624 & 13.0 & 12 & .009 \\
+$\alpha{=}0.4$ & .60 & .518 & 4.1 & 3 & .069 \\
+$\alpha{=}0.5$ (default) & .50 & .425 & 2.1 & 2 & .197 \\
+\midrule
+\multicolumn{6}{@{}l}{Fixed top-$k$: top-3 .484 \quad top-5 .556 \quad top-10 .638} \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{2pt}
+Coverage counts images with a correct category in the set (in-vocabulary images, 98\% of the test set).
+Sets adapt to difficulty: at $\alpha{=}0.4$ the median set has 3 categories, beats a fixed top-3 (.518 vs
+.484), and 7\% of images are sent to manual categorisation. Coverage falls 7--8 points short of the
+target: test uploads are later than the calibration uploads and meet a larger vocabulary, which breaks
+the exchangeability the guarantee assumes. Recalibrating on a rolling window of recent uploads (M1's
+monitoring plan) is required in production.
+
+\subsection{Bias audit, robustness, efficiency}
+{\small\centering
+\begin{tabular}{@{}lrrr@{\hspace{8pt}}lrr@{}}
+\toprule
+\multicolumn{4}{@{}l}{\textbf{F1@5 by group}} & \multicolumn{3}{l@{}}{\textbf{Robustness, F1@5}} \\
+Group & $n$ & +meta & img & Degradation & +meta & img \\ \midrule
+Objects & 318 & .190 & .141 & none & .152 & .085 \\
+Scenes & 109 & .239 & .170 & blur $r{=}2$ & .156 & .077 \\
+Events & 20 & .233 & .206 & blur $r{=}5$ & .145 & .054 \\
+Abstract & 127 & .051 & .029 & JPEG q10 & .151 & .074 \\
+Europe & 42 & .274 & .037 & down $\times$.15 & .152 & .063 \\
+Africa & 71 & .207 & .006 & & & \\
+S.\ America & 48 & .087 & .009 & & & \\
+Asia & 47 & .087 & .034 & & & \\
+N.\ America & 43 & .036 & .012 & & & \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{2pt}
+\textbf{Efficiency} (laptop, no server GPU): end to end p50 30.1\,ms, p95 32.6\,ms per image; scoring and
+ranking 1.0\,ms; 5,366 indexed images and 24,486 categories in 58.3\,MB of memory (84.3\,MB on disk).
+
+\subsection{Content type}
+The classifier reaches 82.9\% on held-out photos across the five types. On a hand-labelled pack of 250
+living subjects (88 of them deliberately hard: partly hidden, old or low-contrast photos), 91.6\% were typed
+Living thing and 88.6\% of the hard ones got the right broad type. Portraits were the exception (4 of 14),
+traced to a collection bug that left the people source categories unused; it is fixed and the classifier
+retrained. Test-pack photos are never used for training.
+
+\section{Findings}
+\begin{itemize}
+\item \textbf{Fusion is the main win:} .152 vs .099 for the best single scorer (+53\%).
+\item \textbf{Metadata is essential for places and robustness:} Africa .207 with a title vs .006 image only;
+under heavy blur F1@5 drops 5\% with metadata but 36\% image only.
+\item \textbf{The long tail is the bottleneck:} recall@5 .821 for categories with $\geq$20 images, .003 for
+unseen ones, which hold 72\% of test labels. Neither text prototypes nor graph smoothing closed this gap.
+\item \textbf{Regional disparity:} with metadata, Europe .274 and Africa .207 but North America .036;
+image-only accuracy is near zero for every region. Groups are small (42--71 images), so the gaps are
+indicative only.
+\item \textbf{Evaluation pitfalls we caught:} a validation vocabulary that included validation labels
+(val--test gap .135$\rightarrow$.014 once fixed), and a display filter placed inside the ranker, which
+silently scored every region at zero.
+\end{itemize}
+
+\section{Testing}
+77 automated tests (offline end-to-end train $\rightarrow$ evaluate $\rightarrow$ predict $\rightarrow$
+update, conformal coverage on synthetic data, smoothing, collectors, demo). Hands-on testing with our own
+photos and tester reports from the public demo led to: centre weighting (people pulled towards
+``Marathons''), buildings as Scenes, Living thing as a fifth type, mixed types (a fruit market is
+Object + Scene), hiding dated and non-Latin categories, filtering ``Wiki Loves'' contest categories, and
+de-duplicating repeated reports.
+
+\section{Responsible Use and Licensing}
+Only openly licensed Commons files are used for training and indexing, and each keeps its licence.
+External datasets suggested during development (ObjectNet, WIDER FACE, DTD, COCO) were \emph{not} used
+for training: their terms forbid training on them, limit use to non-commercial research, or mix such
+licences, which would conflict with the MIT licence and the sponsor's commercial licence. CommonsLens never identifies people; it only types them as
+living things. Suggestions are always reviewed by an editor, with the evidence images shown.
+
+\section{Limitations and Future Work}
+Only 36\% of test labels are reachable, so the next gains are in vocabulary growth and the tail
+(multilingual category names, geotags, mining sibling categories with editors). Also pending: a
+SigLIP vs CLIP comparison (supported in the code), evaluation on a test set of the newest uploads (collector
+built), a human-reviewed score for ``wrong'' suggestions that are actually valid, and rolling conformal
+recalibration.
+
+\end{document}
