@@ -1,4 +1,4 @@
-# People photos added to the demo index through the continual-learning path
+# Optional: people photos that can be added to the index through the continual-learning path
 # (update.py add-images), so that portraits and selfies are not matched to the
 # few festival photos of people in the main dataset.
 

@@ -288,8 +288,8 @@ de-duplicating repeated reports. The last round (a car labelled ``Mini automobil
 photo labelled with a photographer's collection) added a broad-category row and hides collections,
 container categories (``X by Y''), counts and country-level variants unless the title names the country.
 A single person was matched to ``Holi'' because most people photos in our index came from that festival.
-After evaluation, about 500 openly licensed portraits, selfies and group photos were added to the demo
-index without retraining (continual learning); all reported numbers predate this. In the final round,
+More portraits, selfies and group photos can be added to the index without retraining
+(\texttt{configs/seed\_people.txt} with \texttt{update.py add-images}). In the final round,
 testers asked that people not be the ``type'' of a photo and that statues not count as alive: a zero-shot
 subject check now leads with the scene's type (e.g.\ Event + Living object) and types statues as Objects.
 
