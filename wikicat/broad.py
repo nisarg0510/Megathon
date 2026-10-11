@@ -33,6 +33,11 @@ BROAD_CATEGORIES = (
 )
 
 
+# Broad categories that fit when the main subject is a person or a statue (see families.SUBJECT_PROMPTS).
+PEOPLE_BROAD = ("Selfies", "Group selfies", "Portraits", "Groups of people", "Children", "Crowds")
+STATUE_BROAD = ("Statues", "Sculptures", "Monuments and memorials", "Paintings")
+
+
 class BroadCategoryScorer:
     def __init__(self, encoder, names=BROAD_CATEGORIES, temperature: float = 0.01):
         self.names = list(names)
@@ -40,9 +45,18 @@ class BroadCategoryScorer:
         emb = encoder.encode_categories(self.names)
         self.prototypes = emb / np.maximum(np.linalg.norm(emb, axis=1, keepdims=True), 1e-12)
 
-    def top(self, img_emb: np.ndarray, k: int = 3) -> list[dict]:
+    def top(self, img_emb: np.ndarray, k: int = 3, subject: dict[str, float] | None = None) -> list[dict]:
+        """Best broad categories. When the subject check is confident that the main subject is a person
+        (or a statue), the best matching people (statue) category is put first, so a portrait is never
+        summarised by its background."""
         logits = (self.prototypes @ np.asarray(img_emb, dtype=np.float32)) / self.temperature
         p = np.exp(logits - logits.max())
         p /= p.sum()
-        order = np.argsort(-p)[:k]
-        return [{"category": self.names[i], "score": round(float(p[i]), 3)} for i in order]
+        order = list(np.argsort(-p))
+        subject = subject or {}
+        prefer = PEOPLE_BROAD if subject.get("person", 0) >= 0.5 else (
+            STATUE_BROAD if subject.get("statue", 0) >= 0.5 else ())
+        if prefer:
+            first = next(i for i in order if self.names[i] in prefer)
+            order = [first] + [i for i in order if i != first]
+        return [{"category": self.names[i], "score": round(float(p[i]), 3)} for i in order[:k]]

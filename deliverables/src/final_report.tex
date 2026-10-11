@@ -291,7 +291,8 @@ A single person was matched to ``Holi'' because most people photos in our index 
 More portraits, selfies and group photos can be added to the index without retraining
 (\texttt{configs/seed\_people.txt} with \texttt{update.py add-images}). In the final round,
 testers asked that people not be the ``type'' of a photo and that statues not count as alive: a zero-shot
-subject check now leads with the scene's type (e.g.\ Event + Living object) and types statues as Objects.
+subject check now leads with the scene's type (e.g.\ Event + Living object), types statues and framed
+pictures as Objects, and keeps the broad category consistent (Portraits, not Rivers).
 
 \section{Responsible Use and Licensing}
 Only openly licensed Commons files are used for training and indexing, and each keeps its licence.

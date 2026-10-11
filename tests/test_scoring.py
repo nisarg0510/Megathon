@@ -277,3 +277,16 @@ def test_people_lead_with_scene_type_and_statues_are_not_living():
     assert [f for f in out if f["family"] == "Living object"][0]["score"] == 0
     out, kind = adjust_for_subject(fam, {"person": 0.1, "statue": 0.1, "animal or plant": 0.7, "other": 0.1})
     assert kind == "" and out == fam  # a real animal or plant stays a Living object
+
+
+def test_broad_category_follows_the_subject():
+    from wikicat.broad import BROAD_CATEGORIES, PEOPLE_BROAD, BroadCategoryScorer
+    from wikicat.encoder import HashingEncoder
+
+    scorer = BroadCategoryScorer(HashingEncoder())
+    river = scorer.prototypes[BROAD_CATEGORIES.index("Rivers")]
+    assert scorer.top(river)[0]["category"] == "Rivers"
+    top = scorer.top(river, subject={"person": 0.8, "statue": 0.1})
+    assert top[0]["category"] in PEOPLE_BROAD and top[1]["category"] == "Rivers"
+    assert scorer.top(river, subject={"person": 0.1, "statue": 0.7})[0]["category"] in ("Statues", "Sculptures",
+                                                                                     "Monuments and memorials", "Paintings")

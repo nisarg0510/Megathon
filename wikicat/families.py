@@ -39,8 +39,10 @@ SUBJECT_PROMPTS = {
                "a group of people posing"],
     "animal or plant": ["a photo of an animal", "a photo of a bird", "a photo of an insect",
                         "a photo of a plant or flower", "a photo of a mushroom"],
+    # statues and other depictions: paintings and framed pictures of people or animals are not alive
     "statue": ["a photo of a statue", "a photo of a sculpture", "a bronze statue of a person",
-               "a stone statue of an animal", "a monument with a statue"],
+               "a stone statue of an animal", "a monument with a statue", "a framed picture on a wall",
+               "a painting of a person or an animal"],
     "other": ["a photo of a building", "a photo of a landscape", "a photo of an object", "an abstract pattern",
               "a photo of a street"],
 }
