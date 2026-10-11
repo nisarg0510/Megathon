@@ -252,13 +252,23 @@ Living thing and 88.6\% of the hard ones got the right broad type. Portraits wer
 traced to a collection bug that left the people source categories unused; it is fixed and the classifier
 retrained. Test-pack photos are never used for training.
 
+\subsection{Newest uploads (deployment distribution)}
+To see what a deployment would face, we sampled 480 files uploaded 7--30 days before evaluation,
+from 25 random moments with at most five per uploader and none from the training data. Only
+\textbf{2.0\%} of their labels exist in our 24,486-category vocabulary (36\% on the seed-based test set),
+so F1@5 is .002 and R@10 .004, about a fifth of what is reachable. On real uploads accuracy is capped by
+\emph{vocabulary coverage}, not by the model: a deployment must index the full Commons category list.
+CommonsLens can add categories without retraining (text prototype and title matching, our strongest
+single signal), so this is a data step, but a necessary one.
+
 \section{Findings}
 \begin{itemize}
 \item \textbf{Fusion is the main win:} .152 vs .099 for the best single scorer (+53\%).
 \item \textbf{Metadata is essential for places and robustness:} Africa .207 with a title vs .006 image only;
 under heavy blur F1@5 drops 5\% with metadata but 36\% image only.
 \item \textbf{The long tail is the bottleneck:} recall@5 .821 for categories with $\geq$20 images, .003 for
-unseen ones, which hold 72\% of test labels. Neither text prototypes nor graph smoothing closed this gap.
+unseen ones, which hold 72\% of test labels. Neither text prototypes nor graph smoothing closed this gap,
+and on the newest uploads only 2\% of labels are in the vocabulary.
 \item \textbf{Regional disparity:} with metadata, Europe .274 and Africa .207 but North America .036;
 image-only accuracy is near zero for every region. Groups are small (42--71 images), so the gaps are
 indicative only.
@@ -306,10 +316,9 @@ lists the commands and links to the built artifacts. All code is MIT-licensed; t
 libraries and data are credited in the README.
 
 \section{Limitations and Future Work}
-Only 36\% of test labels are reachable, so the next gains are in vocabulary growth and the tail
-(multilingual category names, geotags, mining sibling categories with editors). Also pending: a
-SigLIP vs CLIP comparison (supported in the code), evaluation on a test set of the newest uploads (collector
-built), a human-reviewed score for ``wrong'' suggestions that are actually valid, and rolling conformal
-recalibration.
+Only 36\% of test labels (2\% for the newest uploads) are reachable, so the first step is indexing the
+full Commons category list, then the tail (multilingual category names, geotags, mining sibling categories
+with editors). Also pending: a SigLIP vs CLIP comparison (supported in the code), a human-reviewed score
+for ``wrong'' suggestions that are actually valid, and rolling conformal recalibration.
 
 \end{document}
