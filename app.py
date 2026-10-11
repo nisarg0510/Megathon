@@ -60,6 +60,7 @@ def summarise(result: dict, title: str, description: str) -> dict:
         "description": description or "",
         "unsure": result["unsure"],
         "content_type": result["content_type"],
+        "broad": result.get("broad"),
         "suggestions": [{"category": s["category"], "score": round(s["score"], 3)} for s in result["suggestions"]],
         "suggestion_set": result.get("suggestion_set"),
         "notes": result["notes"],
@@ -81,6 +82,11 @@ def run(image, title, description, top_k, use_hierarchy):
         label = f"Content type: {result['type_label']}"
         others = f"other types: {others}"
     rows.append(["★", label, f"{top['score']:.0%}", others, ""])
+    if result.get("broad"):
+        b0, *b_rest = result["broad"]
+        rows.append(["◆", f"Broad category: {b0['category']}", f"{b0['score']:.0%}",
+                     "general subject, for orientation; next: "
+                     + ", ".join(f"{b['category']} {b['score']:.0%}" for b in b_rest), ""])
     for rank, s in enumerate(result["suggestions"], 1):
         note = f"broader than '{s['suppressed_by']}'" if s["suppressed_by"] else ""
         mark = f"{rank} ✓" if s.get("in_set") else str(rank)

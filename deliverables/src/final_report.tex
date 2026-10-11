@@ -283,7 +283,11 @@ update, conformal coverage on synthetic data, smoothing, collectors, demo). Hand
 photos and tester reports from the public demo led to: centre weighting (people pulled towards
 ``Marathons''), buildings as Scenes, Living thing as a fifth type, mixed types (a fruit market is
 Object + Scene), hiding dated and non-Latin categories, filtering ``Wiki Loves'' contest categories, and
-de-duplicating repeated reports.
+de-duplicating repeated reports. The last round (a car labelled ``Mini automobiles in Germany'', a football
+photo labelled with a photographer's collection) added a broad-category row and hides collections,
+container categories (``X by Y''), counts and country-level variants unless the title names the country.
+A single person was matched to ``Holi'' because most people photos in our index come from that festival;
+fixing this needs more varied training data.
 
 \section{Responsible Use and Licensing}
 Only openly licensed Commons files are used for training and indexing, and each keeps its licence.
@@ -294,7 +298,8 @@ living things. Suggestions are always reviewed by an editor, with the evidence i
 
 \section{Editor Experience}
 Each result starts with a {\color{accent}$\star$} row giving the content type (or two, e.g.\ a fruit
-market is Object + Scene) and an \emph{Unsure} banner when the type is below 50\%. Suggestions follow with
+market is Object + Scene) and an \emph{Unsure} banner when the type is below 50\%, then a broad category
+(e.g.\ Automobiles) from a zero-shot match against about a hundred broad Commons categories. Suggestions follow with
 their score; rows marked \checkmark\ form the conformal set, and notes explain abstention, a missing title
 or a low-quality image. For every suggestion the demo shows the indexed images that voted for it and the
 signals behind its score. Editors can accept or reject suggestions and add new categories; testers can

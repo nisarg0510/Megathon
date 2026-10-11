@@ -43,6 +43,10 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     label = (f"Unsure (best guess: {result['type_label']})" if result["unsure"]
              else f"Content type: {result['type_label']}")
     print(f"    {'★':>4}  {top['score']:6.0%}  {label:<50} other types: {others}")
+    if result.get("broad"):
+        b0, *b_rest = result["broad"]
+        nxt = ", ".join(f"{b['category']} {b['score']:.0%}" for b in b_rest)
+        print(f"    {'◆':>4}  {b0['score']:6.0%}  {'Broad category: ' + b0['category']:<50} next: {nxt}")
     for rank, s in enumerate(result["suggestions"], 1):
         cat = s["category"] if len(s["category"]) <= 50 else s["category"][:47] + "..."
         extra = f"  (broader than '{s['suppressed_by']}')" if s["suppressed_by"] else ""

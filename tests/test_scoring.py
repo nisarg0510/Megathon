@@ -224,6 +224,15 @@ def test_specificity_reasons():
     assert specificity_reason("Photographs of red buses parked near the old market in Kolkata") == "very long name"
     for ok in ("Churches in Paris", "Backpacks", "Côte d'Ivoire", "Cats", "Boeing 747"):
         assert specificity_reason(ok) is None, ok
+    # From tester reports: counts, collections, containers, codes and country-level variants.
+    assert specificity_reason("1 automobile in North Rhine-Westphalia") == "count"
+    assert specificity_reason("Photographs of sports events by Geoff Charles") == "collection"
+    assert specificity_reason("Trees by fruit") == "collection"
+    assert specificity_reason("Milimedia files, Papua New Guinea (review needed)") == "collection"
+    assert specificity_reason("Letters WL on vehicle registration plates") == "code"
+    assert specificity_reason("Black automobiles in Germany") == "country-level"
+    assert specificity_reason("Black automobiles in Germany", "Parked car in Cologne, Germany") is None
+    assert specificity_reason("Beaches in Goa") is None
 
 
 def test_living_things_and_contest_categories():
@@ -237,3 +246,19 @@ def test_living_things_and_contest_categories():
     assert family_of("Farmers' markets") == "Scene" and family_of("Christmas trees") == "Event"
     assert is_maintenance_category("Wildlife and nature images from Wiki Science Competition 2025 in Poland")
     assert is_maintenance_category("Images from Wiki Loves Earth 2023 in India")
+
+
+def test_broad_category_scorer_ranks_a_short_list():
+    import numpy as np
+
+    from wikicat.broad import BROAD_CATEGORIES, BroadCategoryScorer
+    from wikicat.encoder import HashingEncoder
+
+    enc = HashingEncoder()
+    scorer = BroadCategoryScorer(enc)
+    target = scorer.prototypes[BROAD_CATEGORIES.index("Automobiles")]
+    top = scorer.top(target, k=3)
+    assert top[0]["category"] == "Automobiles" and len(top) == 3
+    assert top[0]["score"] >= top[1]["score"] and abs(sum(b["score"] for b in scorer.top(target, k=len(BROAD_CATEGORIES))) - 1) < 0.01
+    assert len(set(BROAD_CATEGORIES)) == len(BROAD_CATEGORIES)
+    assert np.allclose(np.linalg.norm(scorer.prototypes, axis=1), 1, atol=1e-5)

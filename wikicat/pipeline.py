@@ -99,6 +99,7 @@ class CategorySuggester:
         self.lexical = LexicalScorer(vocab.names)
         self._encoder = encoder
         self._family_scorer: FamilyScorer | None = None
+        self._broad_scorer = None
         self.ranker = Ranker(vocab.names, vocab.freq, prototypes, head, self.lexical, fusion, graph,
                              top_n=cfg.top_n, hierarchy_depth=cfg.hierarchy_depth,
                              ancestor_ratio=cfg.ancestor_ratio, ancestor_penalty=cfg.ancestor_penalty,
@@ -125,6 +126,14 @@ class CategorySuggester:
                 classifier = None
             self._family_scorer = FamilyScorer(self.encoder, classifier=classifier)
         return self._family_scorer
+
+    @property
+    def broad_scorer(self):
+        if self._broad_scorer is None:
+            from .broad import BroadCategoryScorer
+
+            self._broad_scorer = BroadCategoryScorer(self.encoder)
+        return self._broad_scorer
 
     @classmethod
     def load(cls, artifacts_dir: str | Path, encoder: BaseEncoder | None = None, **overrides) -> "CategorySuggester":
@@ -258,7 +267,7 @@ class CategorySuggester:
             if self.cfg.hide_countries and is_country(s["category"]):
                 continue
             if (self.cfg.hide_specific and s["score"] < self.cfg.specific_min_score
-                    and specificity_reason(s["category"])):
+                    and specificity_reason(s["category"], meta_text)):
                 hidden += 1
             elif len(ranked) < top_k:
                 ranked.append(s)
@@ -274,8 +283,12 @@ class CategorySuggester:
         for s in ranked:
             s["evidence"] = self.evidence(ctx, s["cat_id"])
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
-        # Two types this close (e.g. a fruit market: Object and Scene) are both shown.
-        mixed = len(families) > 1 and families[1]["score"] >= 0.5 * families[0]["score"]
+        broad = self.broad_scorer.top(emb[0])
+        # Two types this close (e.g. a fruit market: Object and Scene) are both shown, unless the type is
+        # uncertain anyway: then a single best guess is clearer.
+        type_unsure = families[0]["score"] < self.cfg.unsure_threshold if families else True
+        mixed = (not type_unsure and len(families) > 1
+                 and families[1]["score"] >= 0.5 * families[0]["score"])
         type_label = f"{families[0]['family']} + {families[1]['family']}" if mixed else families[0]["family"]
         t2 = time.perf_counter()
         notes = []
@@ -299,8 +312,8 @@ class CategorySuggester:
                              f"correct one with at least {target} probability when the image's category is known "
                              f"(conformal calibration).")
         if hidden:
-            notes.append(f"Hid {hidden} very specific categories (dates, people counts, non-Latin names) "
-                         f"scoring below {self.cfg.specific_min_score:.0%}.")
+            notes.append(f"Hid {hidden} very specific categories (dates, counts, collections, country-level "
+                         f"variants, non-Latin names) scoring below {self.cfg.specific_min_score:.0%}.")
         if quality["low_quality"]:
             notes.append("Low-quality image (" + ", ".join(quality["flags"]) + "): visual scores are less reliable.")
         if not meta_text:
@@ -311,6 +324,7 @@ class CategorySuggester:
             "type_confidence": round(type_confidence, 3),
             "content_type": families,
             "type_label": type_label,
+            "broad": broad,
             "suggestions": ranked,
             "suggestion_set": suggestion_set,
             "quality": quality,
