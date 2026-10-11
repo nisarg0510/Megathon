@@ -29,6 +29,7 @@ from .config import Config
 from .conformal import ConformalCalibrator, group_of
 from .encoder import BaseEncoder, load_encoder, load_image
 from .families import FamilyScorer
+from .geo import is_country
 from .head import LinearHead
 from .hierarchy import CategoryGraph
 from .metadata import LexicalScorer, build_meta_text, extract_years, tokenize
@@ -101,7 +102,7 @@ class CategorySuggester:
         self.ranker = Ranker(vocab.names, vocab.freq, prototypes, head, self.lexical, fusion, graph,
                              top_n=cfg.top_n, hierarchy_depth=cfg.hierarchy_depth,
                              ancestor_ratio=cfg.ancestor_ratio, ancestor_penalty=cfg.ancestor_penalty,
-                             hide_countries=cfg.hide_countries, smoothed=smoothed)
+                             smoothed=smoothed)
 
     # -- loading -----------------------------------------------------------------
 
@@ -250,15 +251,17 @@ class CategorySuggester:
         ctx = self.contexts(emb, [meta_text], meta_embs, [quality["low_quality"]])[0]
         hidden = 0
         res = self.ranker.score(ctx, use_hierarchy)
-        if self.cfg.hide_specific:
-            ranked = []
-            for s in self.ranker.rank(ctx, top_k * 3, use_hierarchy, res):
-                if s["score"] < self.cfg.specific_min_score and specificity_reason(s["category"]):
-                    hidden += 1
-                elif len(ranked) < top_k:
-                    ranked.append(s)
-        else:
-            ranked = self.ranker.rank(ctx, top_k, use_hierarchy, res)
+        # Presentation filters (the model itself is scored without them): bare country names, and
+        # very specific categories unless the score is high.
+        ranked = []
+        for s in self.ranker.rank(ctx, top_k * 3, use_hierarchy, res):
+            if self.cfg.hide_countries and is_country(s["category"]):
+                continue
+            if (self.cfg.hide_specific and s["score"] < self.cfg.specific_min_score
+                    and specificity_reason(s["category"])):
+                hidden += 1
+            elif len(ranked) < top_k:
+                ranked.append(s)
         suggestion_set = None
         if self.conformal is not None:
             alpha = self.cfg.conformal_alpha

@@ -60,7 +60,7 @@ class Config:
     conformal_alpha: float = 0.3
 
     # Presentation of suggestions
-    hide_countries: bool = True  # never suggest bare country / continent names
+    hide_countries: bool = True  # do not show bare country / continent names (display only; evaluation keeps them)
     unsure_threshold: float = 0.5  # content-type score below this marks the image "Unsure"
     center_focus: float = 0.4  # weight of the central-crop embedding for uploaded images (0 = off)
     center_crop: float = 0.6  # size of the central crop, as a fraction of width and height
