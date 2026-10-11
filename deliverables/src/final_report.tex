@@ -6,6 +6,10 @@
 \usepackage{titlesec}
 \usepackage{microtype}
 \usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\definecolor{accent}{HTML}{1565C0}
+\definecolor{soft}{HTML}{E8F0FB}
 \setlist{nosep,leftmargin=1.1em}
 \titleformat{\section}{\normalsize\bfseries}{\thesection.}{0.4em}{}
 \titlespacing*{\section}{0pt}{5pt}{2pt}
@@ -33,6 +37,32 @@ the system is unsure. CommonsLens treats categories as retrievable objects in a 
 a frozen vision--language encoder, several complementary scorers, calibrated fusion, hierarchy-aware
 decoding, and conformal suggestion sets, with evidence shown for every suggestion and an editor always in
 the loop. Nothing is applied automatically.
+
+\begin{figure*}[t]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  box/.style={draw=accent, fill=soft, rounded corners=3pt, align=center, font=\small, minimum height=0.95cm, inner sep=4pt},
+  sc/.style={draw=accent!60, fill=white, rounded corners=2pt, font=\scriptsize, minimum width=2.6cm, minimum height=0.45cm},
+  ar/.style={-{Stealth[length=5pt]}, thick, accent}]
+\node[box] (up) {Upload\\\scriptsize image + title/description};
+\node[box, right=0.45cm of up] (enc) {Frozen CLIP ViT-B/32\\\scriptsize centre-weighted};
+\node[sc, right=0.6cm of enc, yshift=0.95cm] (s1) {$k$NN over indexed images};
+\node[sc, below=0.08cm of s1] (s2) {Text prototypes};
+\node[sc, below=0.08cm of s2] (s3) {Smoothed prototypes};
+\node[sc, below=0.08cm of s3] (s4) {Supervised head};
+\node[sc, below=0.08cm of s4] (s5) {Title / description};
+\node[box, right=0.6cm of s3] (fus) {Fusion\\\scriptsize 17 features, LR};
+\node[box, right=0.45cm of fus] (hier) {Hierarchy\\\scriptsize decoding};
+\node[box, right=0.45cm of hier] (conf) {Conformal set\\\scriptsize or abstain};
+\node[box, right=0.45cm of conf] (out) {Content type, filters,\\\scriptsize evidence $\rightarrow$ editor review};
+\draw[ar] (up) -- (enc);
+\foreach \s in {s1,s2,s3,s4,s5} {\draw[ar, thin] (enc.east) -- (\s.west); \draw[ar, thin] (\s.east) -- (fus.west);}
+\draw[ar] (fus) -- (hier); \draw[ar] (hier) -- (conf); \draw[ar] (conf) -- (out);
+\end{tikzpicture}}
+\caption{CommonsLens pipeline. Fusion runs only on the union of each scorer's top 100 candidates; editor
+accept/reject decisions and new categories update the index and vocabulary without retraining.}
+\end{figure*}
 
 \section{System}
 \textbf{Flow:} upload $\rightarrow$ frozen CLIP ViT-B/32 (SigLIP supported) $\rightarrow$ scorers on a
@@ -66,13 +96,14 @@ reports are de-duplicated and summarised for triage.
 \end{itemize}
 
 \section{Data and Protocol}
-6,303 files from the MediaWiki API: 155 seed categories (107 topical; 48 for regional balance, 8
-countries per continent) plus 1,500 uniformly random files. Hidden and maintenance categories are
+6,303 files from the MediaWiki API: 155 seed categories (107 topical; 48 chosen for balance across
+continents) plus 1,500 uniformly random files. Hidden and maintenance categories are
 removed. \textbf{Temporal split} by upload time (4,429 / 937 / 937), perceptual-hash and embedding
 ($\cos\geq0.95$) de-duplication. \textbf{Realistic validation:} the vocabulary is built from training
 data (plus seeds and parents) only; validation categories are added after fusion is fitted, giving 24,486
-categories at test time. 72\% of test labels belong to categories with no training image, and only 36\%
-of test labels are in the vocabulary at all, which bounds recall.
+categories at test time; the validation--test F1@5 gap is .014, so validation is a faithful guide.
+72\% of test labels belong to categories with no training image, and only 36\% of test labels are in the
+vocabulary at all, which bounds recall. Encoder: CLIP ViT-B/32; $K{=}50$, $\tau$ tuned on validation.
 
 \section{Results}
 \subsection{Main results (937 test images)}
@@ -92,7 +123,9 @@ mAP (macro) & -- & .121 & -- & -- \\ \bottomrule
 \vspace{2pt}
 Accuracy is unchanged from M2 while the system gained conformal sets, the trained content type and
 smoothed prototypes. About one in three uploads with a title gets a correct category in first place, and 64\%
-of in-vocabulary uploads get one in the top 10.
+of in-vocabulary uploads get one in the top 10. Hierarchy-aware P@5 (.234) is double strict P@5 (.116):
+many ``wrong'' suggestions are a parent or child of a true category, which an editor would often accept.
+The tuned hierarchy decoding leaves F1@5 unchanged (.152 with and without).
 
 \vspace{3pt}
 {\small\centering
@@ -109,6 +142,20 @@ $k$NN only & .069 & .158 & & & \\
 Meta text only & .052 & .170 & & & \\
 Text proto only & .005 & .020 & & & \\ \bottomrule
 \end{tabular}\par}
+
+\vspace{3pt}
+{\small\centering
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{By category type} & Object & Living & Scene & Event & Abstract \\ \midrule
+Test labels & 2151 & 224 & 597 & 106 & 249 \\
+Recall@5 & .123 & .384 & .238 & .217 & .112 \\
+Precision@5 & .120 & .184 & .120 & .064 & .059 \\ \bottomrule
+\end{tabular}\par}
+
+\vspace{2pt}
+Living things and scenes are easiest; abstract concepts are hardest. Resolution barely matters
+(F1@5 .155 for $\geq$2000\,px, .143 for 800--2000\,px, .144 below 800\,px).
 
 \subsection{Smoothed prototypes (M1's core idea)}
 {\small\centering
@@ -139,6 +186,7 @@ so the smoothed set is now a separate signal.
 $\alpha{=}0.3$ & .70 & .624 & 13.0 & 12 & .009 \\
 $\alpha{=}0.4$ & .60 & .518 & 4.1 & 3 & .069 \\
 $\alpha{=}0.5$ (default) & .50 & .425 & 2.1 & 2 & .197 \\
+\textit{Image only,} $\alpha{=}0.5$ & .50 & .370 & 9.6 & 9 & .001 \\
 \midrule
 \multicolumn{6}{@{}l}{Fixed top-$k$: top-3 .484 \quad top-5 .556 \quad top-10 .638} \\ \bottomrule
 \end{tabular}\par}
@@ -146,7 +194,8 @@ $\alpha{=}0.5$ (default) & .50 & .425 & 2.1 & 2 & .197 \\
 \vspace{2pt}
 Coverage counts images with a correct category in the set (in-vocabulary images, 98\% of the test set).
 Sets adapt to difficulty: at $\alpha{=}0.4$ the median set has 3 categories, beats a fixed top-3 (.518 vs
-.484), and 7\% of images are sent to manual categorisation. Coverage falls 7--8 points short of the
+.484), and 7\% of images are sent to manual categorisation. Without a title the same guarantee needs sets
+about five times larger, so the demo encourages adding one. Coverage falls 7--8 points short of the
 target: test uploads are later than the calibration uploads and meet a larger vocabulary, which breaks
 the exchangeability the guarantee assumes. Recalibrating on a rolling window of recent uploads (M1's
 monitoring plan) is required in production.
@@ -173,7 +222,8 @@ N.\ America & 43 & .036 & .012 & & & \\ \bottomrule
 ranking 1.0\,ms; 5,366 indexed images and 24,486 categories in 58.3\,MB of memory (84.3\,MB on disk).
 
 \subsection{Content type}
-The classifier reaches 82.9\% on held-out photos across the five types. On a hand-labelled pack of 250
+The classifier is trained on 939 photos (Object 175, Living thing 216, Scene 193, Event 176, Abstract
+179) and reaches 82.9\% on held-out photos across the five types. On a hand-labelled pack of 250
 living subjects (88 of them deliberately hard: partly hidden, old or low-contrast photos), 91.6\% were typed
 Living thing and 88.6\% of the hard ones got the right broad type. Portraits were the exception (4 of 14),
 traced to a collection bug that left the people source categories unused; it is fixed and the classifier
@@ -190,8 +240,8 @@ unseen ones, which hold 72\% of test labels. Neither text prototypes nor graph s
 image-only accuracy is near zero for every region. Groups are small (42--71 images), so the gaps are
 indicative only.
 \item \textbf{Evaluation pitfalls we caught:} a validation vocabulary that included validation labels
-(val--test gap .135$\rightarrow$.014 once fixed), and a display filter placed inside the ranker, which
-silently scored every region at zero.
+(val--test gap .135$\rightarrow$.014 once fixed), and a display-only filter wrongly applied inside the
+model, which silently zeroed the scores for photos from several regions.
 \end{itemize}
 
 \section{Testing}
@@ -208,6 +258,29 @@ External datasets suggested during development (ObjectNet, WIDER FACE, DTD, COCO
 for training: their terms forbid training on them, limit use to non-commercial research, or mix such
 licences, which would conflict with the MIT licence and the sponsor's commercial licence. CommonsLens never identifies people; it only types them as
 living things. Suggestions are always reviewed by an editor, with the evidence images shown.
+
+\section{Editor Experience}
+Each result starts with a {\color{accent}$\star$} row giving the content type (or two, e.g.\ a fruit
+market is Object + Scene) and an \emph{Unsure} banner when the type is below 50\%. Suggestions follow with
+their score; rows marked \checkmark\ form the conformal set, and notes explain abstention, a missing title
+or a low-quality image. For every suggestion the demo shows the indexed images that voted for it and the
+signals behind its score. Editors can accept or reject suggestions and add new categories; testers can
+report a problem, which is stored with what the system showed. A public read-only mode hides the editing
+panels.
+
+\section{Deployment and Scalability}
+The encoder is frozen, so no GPU training is needed and a new deployment only builds an index. Scoring
+and ranking take 1\,ms per image after encoding; the index is a FAISS flat, HNSW or IVF-PQ index chosen by
+configuration, and candidates keep fusion independent of the number of categories. On Commons the
+system would run asynchronously on upload events and store suggestions with their evidence for editors;
+nothing blocks or changes an upload. New categories, new images and editor decisions take effect
+immediately; the fusion model and conformal thresholds are refitted periodically on recent uploads.
+
+\section{Reproducibility}
+Every number in this report comes from the repository's scripts (\texttt{prepare\_data.py},
+\texttt{train.py}, \texttt{evaluate.py}, \texttt{train\_content\_type.py}) with a fixed seed; the README
+lists the commands and links to the built artifacts. All code is MIT-licensed; third-party models,
+libraries and data are credited in the README.
 
 \section{Limitations and Future Work}
 Only 36\% of test labels are reachable, so the next gains are in vocabulary growth and the tail
