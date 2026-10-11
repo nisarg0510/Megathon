@@ -61,6 +61,7 @@ def summarise(result: dict, title: str, description: str) -> dict:
         "unsure": result["unsure"],
         "content_type": result["content_type"],
         "suggestions": [{"category": s["category"], "score": round(s["score"], 3)} for s in result["suggestions"]],
+        "suggestion_set": result.get("suggestion_set"),
         "notes": result["notes"],
     }
 
@@ -82,7 +83,8 @@ def run(image, title, description, top_k, use_hierarchy):
     rows.append(["★", label, f"{top['score']:.0%}", others, ""])
     for rank, s in enumerate(result["suggestions"], 1):
         note = f"broader than '{s['suppressed_by']}'" if s["suppressed_by"] else ""
-        rows.append([str(rank), s["category"], f"{s['score']:.0%}", explain(s), note])
+        mark = f"{rank} ✓" if s.get("in_set") else str(rank)
+        rows.append([mark, s["category"], f"{s['score']:.0%}", explain(s), note])
         for ev in s["evidence"]:
             thumb = _thumb(ev)
             if thumb and ev["title"] not in seen:
@@ -228,10 +230,13 @@ def main() -> None:
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
                         help="Mark the image Unsure when the content-type score is below this (default 0.5)")
+    parser.add_argument("--alpha", dest="conformal_alpha", type=float, default=None,
+                        help="Suggestion set error rate: the set holds a correct category with probability >= 1 - alpha")
     args = parser.parse_args()
     ARTIFACTS, REPORTS_DIR = args.artifacts_dir, args.reports_dir
     SUGGESTER = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
-                                       center_focus=args.center_focus, hide_specific=args.hide_specific)
+                                       center_focus=args.center_focus, hide_specific=args.hide_specific,
+                                       conformal_alpha=args.conformal_alpha)
     _ = SUGGESTER.encoder  # load weights before the first request
     READ_ONLY = args.read_only
     build_ui(READ_ONLY).launch(server_name=args.host, server_port=args.port, share=args.share)

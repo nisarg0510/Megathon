@@ -46,7 +46,8 @@ def print_result(path: str, result: dict, show_evidence: bool) -> None:
     for rank, s in enumerate(result["suggestions"], 1):
         cat = s["category"] if len(s["category"]) <= 50 else s["category"][:47] + "..."
         extra = f"  (broader than '{s['suppressed_by']}')" if s["suppressed_by"] else ""
-        print(f"    {rank:>4}  {s['score']:6.0%}  {cat:<50} {explain(s)}{extra}")
+        mark = f"{rank} ✓" if s.get("in_set") else str(rank)
+        print(f"    {mark:>4}  {s['score']:6.0%}  {cat:<50} {explain(s)}{extra}")
         if show_evidence:
             for ev in s["evidence"]:
                 print(f"            similar: {ev['title']} (cos {ev['similarity']:.2f}) {ev['page_url']}")
@@ -65,6 +66,8 @@ def main(argv=None) -> list[dict]:
     parser.add_argument("--no-hierarchy", action="store_true", help="Disable ancestor suppression")
     parser.add_argument("--unsure-threshold", type=float, default=None,
                         help="Mark the image Unsure when the content-type score is below this (default 0.5)")
+    parser.add_argument("--alpha", dest="conformal_alpha", type=float, default=None,
+                        help="Suggestion set error rate: the set holds a correct category with probability >= 1 - alpha")
     parser.add_argument("--show-specific", dest="hide_specific", action="store_false", default=None,
                         help="Also show dated / people-count / non-Latin categories below 70%%")
     parser.add_argument("--center-focus", type=float, default=None,
@@ -74,7 +77,8 @@ def main(argv=None) -> list[dict]:
     args = parser.parse_args(argv)
 
     suggester = CategorySuggester.load(args.artifacts_dir, device=args.device, unsure_threshold=args.unsure_threshold,
-                                       center_focus=args.center_focus, hide_specific=args.hide_specific)
+                                       center_focus=args.center_focus, hide_specific=args.hide_specific,
+                                       conformal_alpha=args.conformal_alpha)
     outputs = []
     for path in args.images:
         try:

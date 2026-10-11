@@ -2,7 +2,8 @@
 
 Reports sample-wise P@k / R@k / F1@k (with and without metadata), a per-scorer
 ablation, hierarchy-aware precision, mAP, recall by category frequency
-(head / torso / tail / unseen), by category type, by resolution band, under
+(head / torso / tail / unseen), text vs graph-smoothed prototypes, conformal
+suggestion sets vs fixed top-k, by category type, by resolution band, under
 synthetic degradations, plus latency and index size.
 
 Examples
@@ -22,6 +23,7 @@ from pathlib import Path
 
 import numpy as np
 
+from wikicat.conformal import set_report, topk_hit_rate
 from wikicat.data_loader import load_records, read_seed_groups
 from wikicat.encoder import load_image
 from wikicat.families import family_of
@@ -67,6 +69,15 @@ def score_all(suggester, embs, texts, metas, lowq):
     return scored, (time.perf_counter() - t0) / max(len(scored), 1) * 1000
 
 
+def prototype_predictions(protos: np.ndarray, names: list[str], embs: np.ndarray, k: int) -> list[list[str]]:
+    preds = []
+    for start in range(0, len(embs), 256):
+        sims = embs[start:start + 256] @ protos.T
+        top = np.argsort(-sims, axis=1)[:, :k]
+        preds += [[names[j] for j in row] for row in top]
+    return preds
+
+
 def prf_table(preds, gold, ks) -> dict:
     return {f"@{k}": prf_at_k(preds, gold, k) for k in ks}
 
@@ -94,6 +105,27 @@ def markdown_report(res: dict, ks: list[int]) -> str:
     lines += [f"## Ablation (with metadata), F1@{k_mid} and R@{max(ks)}", "", "| ranking | F1 | R |", "|---|---|---|"]
     for name, table in res["ablation"].items():
         lines.append(f"| {name} | {fmt(table[f'@{k_mid}']['F1'])} | {fmt(table[f'@{max(ks)}']['R'])} |")
+    if res.get("prototype_smoothing"):
+        ps = res["prototype_smoothing"]
+        buckets = list(next(iter(ps.values()))["buckets"])
+        lines += ["", f"## Prototype scorer alone: text vs graph-smoothed prototypes (R@{max(ks)}, micro)", "",
+                  "| prototypes | all labels | " + " | ".join(buckets) + " |", "|---" * (len(buckets) + 2) + "|"]
+        for name, v in ps.items():
+            cells = [fmt(v["buckets"][b]["micro_recall"]) for b in buckets]
+            lines.append(f"| {name} | {fmt(v['R'])} | " + " | ".join(cells) + " |")
+    if res.get("conformal"):
+        cf = res["conformal"]
+        lines += ["", f"## Conformal suggestion sets (default alpha {cf['alpha_default']:g})", "",
+                  "| setting | alpha | target | coverage | mean size | median size | abstention | coverage when answered |",
+                  "|---|---|---|---|---|---|---|---|"]
+        for setting in ("image + metadata", "image only"):
+            for a, v in cf[setting].items():
+                lines.append(f"| {setting} | {a} | {v['target']:.2f} | {fmt(v['coverage'])} | {fmt(v['mean_size'])} | "
+                             f"{fmt(v['median_size'])} | {fmt(v['abstention'])} | {fmt(v['coverage_when_answered'])} |")
+        lines += ["", "Fixed top-k baseline (a correct category in the top k):", "",
+                  "| k | image + metadata | image only |", "|---|---|---|"]
+        for k, v in cf["fixed_top_k"].items():
+            lines.append(f"| {k} | {fmt(v['image + metadata'])} | {fmt(v['image only'])} |")
     lines += ["", f"## Recall@{k_mid} by category frequency in the index", "",
               "| bucket | categories | labels | macro recall | micro recall |", "|---|---|---|---|---|"]
     for b, v in res["frequency_buckets"].items():
@@ -203,6 +235,27 @@ def main(argv=None) -> dict:
     k_mid = 5 if 5 in ks else ks[0]
     freq = {n: float(f) for n, f in zip(names, suggester.vocab.freq)}
     res["frequency_buckets"] = bucket_report(per_category_recall(full, gold, k_mid), freq)
+
+    # Graph-smoothed vs plain text prototypes, prototype scorer alone (M1 ablation: tail recall).
+    text_file = Path(args.artifacts_dir) / "text_prototypes.npy"
+    if text_file.exists():
+        text_protos = np.load(text_file).astype(np.float32)
+        res["prototype_smoothing"] = {}
+        for label, protos in (("text only", text_protos), ("graph-smoothed", suggester.prototypes.vectors)):
+            preds = prototype_predictions(protos, names, embs, max_k)
+            res["prototype_smoothing"][label] = {
+                "R": prf_at_k(preds, gold, max_k)["R"],
+                "buckets": bucket_report(per_category_recall(preds, gold, max_k), freq)}
+
+    if suggester.conformal is not None:
+        has_meta = [m is not None for m in metas]
+        res["conformal"] = {
+            "alpha_default": cfg.conformal_alpha,
+            "image + metadata": set_report(suggester.conformal, scored_meta, has_meta, gold, names),
+            "image only": set_report(suggester.conformal, scored_img, [False] * len(gold), gold, names),
+            "fixed_top_k": {f"@{k}": {"image + metadata": topk_hit_rate(scored_meta, gold, names, k),
+                                      "image only": topk_hit_rate(scored_img, gold, names, k)} for k in ks},
+        }
     res["category_types"] = type_report(full, gold, k_mid)
 
     bands: dict[str, list[int]] = defaultdict(list)

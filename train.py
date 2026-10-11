@@ -5,6 +5,7 @@ Examples
     python train.py
     python train.py --model google/siglip-base-patch16-224 --device cuda
     python train.py --index-type HNSW32 --artifacts-dir artifacts_siglip
+    python train.py --no-graph-smoothing --artifacts-dir artifacts_text   # ablation
 """
 from __future__ import annotations
 
@@ -31,6 +32,8 @@ def main(argv=None) -> dict:
                         help="Do not add parent categories to the vocabulary")
     parser.add_argument("--no-index-val", dest="index_val_after_fusion", action="store_false", default=None,
                         help="Keep validation images out of the final k-NN index")
+    parser.add_argument("--no-graph-smoothing", dest="graph_smoothing", action="store_false", default=None,
+                        help="Plain text prototypes (ablation)")
     parser.add_argument("--seed", type=int)
     args = parser.parse_args(argv)
 
@@ -46,6 +49,10 @@ def main(argv=None) -> dict:
         summary["val_candidate_recall"] = round(report["fusion"]["val_candidate_recall"], 3)
     if "hierarchy_tuning" in report:
         summary["hierarchy_best"] = report["hierarchy_tuning"]["best"]
+    if "smoothing_tuning" in report:
+        summary["smoothing_best"] = report["smoothing_tuning"]["best"]
+    if "conformal" in report:
+        summary["conformal_alpha"] = report["conformal"]["alpha"]
     print(json.dumps(summary, indent=1))
     print(f"Artifacts written to {cfg.artifacts_dir}/")
     return report

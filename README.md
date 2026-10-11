@@ -65,6 +65,10 @@ Writes everything needed for inference to `artifacts/`. Useful options:
 | `--device` | `cpu`, `cuda`, `mps` (default: auto) |
 | `--index-type` | `flat` (default), `HNSW32`, `IVF1024,PQ64` |
 | `--artifacts-dir` | `artifacts_siglip` (keep several models side by side) |
+| `--no-graph-smoothing` | plain text prototypes, for the ablation: `python train.py --no-graph-smoothing --artifacts-dir artifacts_text` |
+
+Training also chooses how category prototypes are smoothed (text, image centroid, parent and sibling categories) and
+calibrates the conformal suggestion sets; both choices are in `artifacts/train_report.json`.
 
 ### 2b. Train the content-type classifier (Object / Living thing / Scene / Event / Abstract concept)
 
@@ -82,6 +86,7 @@ under `content_type_data/<Type>/`. Test packs are only evaluated on, never train
 python evaluate.py --split test
 python evaluate.py --split test --k 1 3 5 10 --degrade blur:2,jpeg:10,downscale:0.15 --latency 50
 python evaluate.py --center-focus 0.4                 # evaluate with centre-focused embeddings
+python evaluate.py --artifacts-dir artifacts_text --out results_text --degrade "" --latency 0   # ablation run
 ```
 
 Writes `results/metrics_test.json` and `results/report_test.md`.
@@ -95,6 +100,7 @@ python predict.py img1.jpg img2.jpg --json > suggestions.json
 python predict.py https://upload.wikimedia.org/.../image.jpg
 python predict.py photo.jpg --unsure-threshold 0.4   # mark as Unsure below 40% (default 50%)
 python predict.py photo.jpg --center-focus 0        # use the whole frame equally (default 0.4 favours the centre)
+python predict.py photo.jpg --alpha 0.2             # suggestion set (marked ✓) holds a correct category with >= 80% probability
 ```
 
 ### 5. Demo UI

@@ -28,9 +28,11 @@ def test_train_writes_artifacts(built):
     root, cfg, report = built
     art = root / "artifacts"
     for name in ("config.json", "vocab.json", "prototypes.npy", "knn_index.npy", "knn_labels.json", "items.jsonl",
-                 "head.npz", "fusion.json", "hierarchy.json", "train_report.json"):
+                 "head.npz", "fusion.json", "hierarchy.json", "train_report.json", "conformal.json",
+                 "text_prototypes.npy"):
         assert (art / name).exists(), name
     assert report["counts"]["train"] > 0 and report["vocabulary"] > 0
+    assert len(report["smoothing_tuning"]["grid"]) == 5 and report["conformal"]["alpha"] in (0.1, 0.2, 0.3, 0.4, 0.5)
     assert json.loads((art / "fusion.json").read_text())["fitted"]
 
 
@@ -46,6 +48,10 @@ def test_evaluate_runs(built):
     assert 0.0 <= res["content_type"]["top1_hit"] <= 1.0
     assert sum(g["images"] for g in res["seed_groups"].values()) == res["n_images"]
     assert (root / "results" / "report_test.md").exists()
+    assert set(res["prototype_smoothing"]) == {"text only", "graph-smoothed"}
+    cf = res["conformal"]
+    assert all(0 <= v["coverage"] <= 1 and v["mean_size"] >= 0 for v in cf["image only"].values())
+    assert set(cf["fixed_top_k"]) == {"@1", "@3", "@5", "@10"}
 
 
 def test_predict_returns_ranked_suggestions(built, capsys):
@@ -58,6 +64,11 @@ def test_predict_returns_ranked_suggestions(built, capsys):
     assert out["unsure"] == (out["type_confidence"] < 0.5)
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)
+    sset = out["suggestion_set"]
+    assert sset is not None and sset["abstain"] == (sset["size"] == 0)
+    # The set is the top of the ranking: marked rows come first.
+    marks = [s["in_set"] for s in out["suggestions"]]
+    assert marks == sorted(marks, reverse=True)
     assert json.loads(capsys.readouterr().out)[0]["image"] == image
 
 

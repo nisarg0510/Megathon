@@ -4,11 +4,15 @@
 2. Vocabulary = train categories, seed categories and their parents. Val
    categories are not added yet, so validation sees the same share of unknown
    categories that test will (otherwise fusion is tuned on an easy set).
-3. Text prototypes, k-NN index over train, supervised head on train.
+3. Category prototypes: text embeddings, graph-smoothed with image centroids
+   and parent/sibling prototypes (the blend is chosen on val); k-NN index over
+   train; supervised head on train.
 4. Tune k-NN (K, tau) and fit the fusion stacker on val, with copies of val
    that have metadata removed or images degraded, so the stacker learns how
-   to weigh signals in those conditions.
-5. Add val categories and val images (they predate the test period) and save.
+   to weigh signals in those conditions. Then calibrate conformal suggestion
+   sets on val.
+5. Add val categories and val images (they predate the test period), recompute
+   the smoothed prototypes with them, and save.
 """
 from __future__ import annotations
 
@@ -22,16 +26,18 @@ from pathlib import Path
 import numpy as np
 
 from .config import Config
+from .conformal import ALPHAS, ConformalCalibrator, nonconformity
 from .data_loader import assign_temporal_splits, is_maintenance_category, load_records
 from .encoder import BaseEncoder, load_encoder, load_image
 from .head import LinearHead
 from .hierarchy import CategoryGraph
 from .metadata import build_meta_text
-from .metrics import prf_at_k
+from .metrics import per_category_recall, prf_at_k
 from .pipeline import CategorySuggester, Vocabulary
 from .quality import assess_quality, degrade, random_degradation
 from .ranker import FEATURE_NAMES, FusionModel
 from .retriever import KNNScorer, PrototypeScorer, VectorIndex
+from .smoothing import smooth_prototypes
 
 log = logging.getLogger(__name__)
 
@@ -225,6 +231,73 @@ def fit_fusion(suggester: CategorySuggester, val_records: list[dict], val_embs: 
     return fusion, report
 
 
+# (name, use image centroids, gamma for the parent/sibling average)
+SMOOTHING_GRID = (("text only", False, 0.0), ("text + graph", False, 0.3), ("text + images", True, 0.0),
+                  ("text + images + graph", True, 0.3), ("text + images + graph (strong)", True, 0.6))
+
+
+def prototype_recall(protos: np.ndarray, names: list[str], q: np.ndarray, gold: list[set[str]],
+                     train_freq: dict[str, float], k: int = 10, tail_max: int = 4) -> dict:
+    """Recall@k of the prototype scorer alone, overall and for tail categories
+    (in the vocabulary with at most `tail_max` training images)."""
+    preds = []
+    for start in range(0, len(q), 256):
+        sims = q[start:start + 256] @ protos.T
+        kk = min(k, sims.shape[1])
+        top = np.argpartition(-sims, kk - 1, axis=1)[:, :kk]
+        preds += [[names[j] for j in row] for row in top]
+    per_cat = per_category_recall(preds, gold, k)
+    tail = [c for c in per_cat if c in train_freq and train_freq[c] <= tail_max]
+    hits, labels = sum(per_cat[c][0] for c in tail), sum(per_cat[c][1] for c in tail)
+    return {f"R@{k}": prf_at_k(preds, gold, k)["R"], f"tail_R@{k}": hits / labels if labels else None,
+            "tail_labels": labels}
+
+
+def tune_smoothing(cfg: Config, text: np.ndarray, vocab: Vocabulary, graph: CategoryGraph, train_embs: np.ndarray,
+                   train_labels: list[list[int]], val_embs: np.ndarray, gold: list[set[str]]) -> dict:
+    """Pick how prototypes are smoothed by the prototype scorer's recall on val."""
+    freq = {n: float(f) for n, f in zip(vocab.names, vocab.freq)}
+    results = []
+    for name, use_images, gamma in SMOOTHING_GRID:
+        protos = smooth_prototypes(text, vocab.names, graph, train_embs, train_labels, cfg.smooth_kappa, gamma,
+                                   use_images)
+        results.append({"setting": name, "use_images": use_images, "gamma": gamma,
+                        **prototype_recall(protos, vocab.names, val_embs, gold, freq)})
+    best = max(results, key=lambda r: r["R@10"])
+    cfg.smooth_use_images, cfg.smooth_gamma = best["use_images"], best["gamma"]
+    return {"best": best, "grid": results}
+
+
+def calibrate_conformal(suggester: CategorySuggester, val_records: list[dict], val_embs: np.ndarray,
+                        val_meta: list[np.ndarray | None]) -> tuple[ConformalCalibrator, dict]:
+    """Nonconformity scores on val, kept separately for uploads with and without metadata."""
+    texts = [record_meta_text(r) for r in val_records]
+    gold = [set(r["categories"]) for r in val_records]
+    lowq = quality_flags(val_records)
+    names = suggester.vocab.names
+    scores: dict[str, list[float]] = {"with_metadata": [], "image_only": []}
+    scored = []
+    for contexts in (suggester.contexts(val_embs, texts, val_meta, lowq),
+                     suggester.contexts(val_embs, None, None, lowq)):
+        for ctx, g in zip(contexts, gold):
+            res = suggester.ranker.score(ctx)
+            group = "with_metadata" if ctx.has_meta else "image_only"
+            scores[group].append(nonconformity(res["final"], [names[c] for c in res["cands"]], g))
+            scored.append((res["final"], ctx.has_meta))
+    cal = ConformalCalibrator(scores, suggester.cfg.conformal_alpha)
+    median_size = {}
+    for a in ALPHAS:
+        sizes = {True: [], False: []}
+        for final, has_meta in scored:
+            sizes[has_meta].append(len(cal.predict_set(final, has_meta, a)))
+        median_size[a] = max(float(np.median(v)) for v in sizes.values() if v)
+    suggester.cfg.conformal_alpha = cal.choose_alpha(median_size)
+    report = {"calibration_images": {g: len(v) for g, v in scores.items()}, "alpha": cal.alpha,
+              "thresholds": {f"{a:g}": {g: round(cal.threshold(a, g), 4) for g in scores} for a in ALPHAS},
+              "val_median_set_size": {f"{a:g}": m for a, m in median_size.items()}}
+    return cal, report
+
+
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
@@ -282,9 +355,20 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
     vocab = build_vocabulary(cfg, records, tr, [], graph, seeds)
     log.info("Vocabulary: %d categories", len(vocab))
 
-    prototypes = PrototypeScorer(encoder.encode_categories(vocab.names), cfg.index_type)
-    knn = KNNScorer(VectorIndex(encoder.dim, cfg.index_type), [], [], [])
+    text_protos = encoder.encode_categories(vocab.names)
     train_labels = [vocab.ids(records[i]["categories"]) for i in tr]
+    smoothing_report = None
+    if cfg.graph_smoothing:
+        if len(va):
+            smoothing_report = tune_smoothing(cfg, text_protos, vocab, graph, embs[tr], train_labels, embs[va],
+                                              [set(records[i]["categories"]) for i in va])
+            log.info("Prototype smoothing: %s", smoothing_report["best"]["setting"])
+        protos = smooth_prototypes(text_protos, vocab.names, graph, embs[tr], train_labels, cfg.smooth_kappa,
+                                   cfg.smooth_gamma, cfg.smooth_use_images)
+    else:
+        protos = text_protos
+    prototypes = PrototypeScorer(protos, cfg.index_type)
+    knn = KNNScorer(VectorIndex(encoder.dim, cfg.index_type), [], [], [])
     knn.add(embs[tr], train_labels, [records[i]["id"] for i in tr])
     items = [item_meta(records[i]) for i in tr]
 
@@ -292,7 +376,7 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
     head = None
     if len(head_cats):
         log.info("Training head on %d categories", len(head_cats))
-        head = LinearHead.fit(embs[tr], train_labels, head_cats, prototypes.vectors[head_cats],
+        head = LinearHead.fit(embs[tr], train_labels, head_cats, text_protos[head_cats],
                               epochs=cfg.head_epochs, lr=cfg.head_lr, l2_to_init=cfg.head_l2_to_init,
                               seed=cfg.seed)
 
@@ -304,6 +388,8 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
         "vocabulary": len(vocab),
         "head_categories": int(len(head_cats)),
     }
+    if smoothing_report:
+        report["smoothing_tuning"] = smoothing_report
 
     if len(va):
         val_records = [records[i] for i in va]
@@ -319,6 +405,8 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
         report["fusion"] = fusion_report
         report["hierarchy_tuning"] = tune_hierarchy(suggester, val_records, embs[va], val_meta)
         log.info("Ancestor penalty tuned: %.1f", cfg.ancestor_penalty)
+        suggester.conformal, report["conformal"] = calibrate_conformal(suggester, val_records, embs[va], val_meta)
+        log.info("Conformal sets: alpha=%.2f", cfg.conformal_alpha)
 
         if cfg.index_val_after_fusion:
             val_cats = sorted({c for r in val_records for c in r["categories"]})
@@ -328,6 +416,15 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
             report["vocabulary_after_val"] = len(suggester.vocab)
             suggester.add_images(embs[va], [r["categories"] for r in val_records],
                                  [item_meta(r) for r in val_records])
+
+    if cfg.graph_smoothing:
+        # Categories added after fusion got text-only prototypes; smooth everything again
+        # with the validation images now in the index.
+        all_text = np.vstack([text_protos, suggester.prototypes.vectors[len(text_protos):]])
+        suggester.prototypes.set_vectors(smooth_prototypes(
+            all_text, suggester.vocab.names, graph, suggester.knn.index.vectors, suggester.knn.labels,
+            cfg.smooth_kappa, cfg.smooth_gamma, cfg.smooth_use_images))
+        np.save(out_dir / "text_prototypes.npy", all_text.astype(np.float16))
 
     suggester.save(out_dir)
     (out_dir / "excluded_ids.json").write_text(json.dumps(excluded))

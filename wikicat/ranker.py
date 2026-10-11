@@ -242,8 +242,8 @@ class Ranker:
             final, suppressed = prob.copy(), {}
         return {"cands": cands, "features": x, "prob": prob, "final": final, "suppressed": suppressed}
 
-    def rank(self, ctx: QueryContext, top_k: int = 10, use_hierarchy: bool = True) -> list[dict]:
-        res = self.score(ctx, use_hierarchy)
+    def rank(self, ctx: QueryContext, top_k: int = 10, use_hierarchy: bool = True, res: dict | None = None) -> list[dict]:
+        res = res if res is not None else self.score(ctx, use_hierarchy)
         order = np.argsort(-res["final"])[:top_k]
         contrib = self.fusion.contributions(res["features"][order]) if len(order) else np.zeros((0, 0))
         out = []

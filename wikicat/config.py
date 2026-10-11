@@ -49,6 +49,16 @@ class Config:
     # Vocabulary
     vocab_include_parents: bool = True
 
+    # Graph-smoothed prototypes: text embedding + image centroid + parent/sibling average.
+    # Whether images and the graph are used, and gamma, are chosen on validation by train.py.
+    graph_smoothing: bool = True
+    smooth_use_images: bool = True
+    smooth_kappa: float = 5.0  # images at which a category trusts its centroid as much as its name
+    smooth_gamma: float = 0.3  # weight of the parent/sibling average for a category with no images
+
+    # Conformal suggestion sets: P(set holds a correct category) >= 1 - alpha. Chosen by train.py.
+    conformal_alpha: float = 0.3
+
     # Presentation of suggestions
     hide_countries: bool = True  # never suggest bare country / continent names
     unsure_threshold: float = 0.5  # content-type score below this marks the image "Unsure"

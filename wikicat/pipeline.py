@@ -10,6 +10,8 @@ Artifacts directory layout (written by train.py):
     items.jsonl          title and URLs of indexed images (explanations)
     head.npz             supervised head
     fusion.json          fusion weights
+    conformal.json       conformal calibration scores (suggestion sets)
+    text_prototypes.npy  category text embeddings before graph smoothing
     hierarchy.json       category parents
     feedback.jsonl       editor accept/reject log (appended at run time)
 """
@@ -24,6 +26,7 @@ from pathlib import Path
 import numpy as np
 
 from .config import Config
+from .conformal import ConformalCalibrator, group_of
 from .encoder import BaseEncoder, load_encoder, load_image
 from .families import FamilyScorer
 from .head import LinearHead
@@ -80,8 +83,9 @@ class Vocabulary:
 class CategorySuggester:
     def __init__(self, cfg: Config, vocab: Vocabulary, prototypes: PrototypeScorer, knn: KNNScorer,
                  head: LinearHead | None, fusion: FusionModel, graph: CategoryGraph, items: list[dict],
-                 encoder: BaseEncoder | None = None):
+                 encoder: BaseEncoder | None = None, conformal: ConformalCalibrator | None = None):
         self.cfg = cfg
+        self.conformal = conformal
         self.vocab = vocab
         self.prototypes = prototypes
         self.knn = knn
@@ -128,6 +132,7 @@ class CategorySuggester:
         head_path = d / "head.npz"
         items = [json.loads(l) for l in (d / "items.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
         fusion_path = d / "fusion.json"
+        conformal_path = d / "conformal.json"
         return cls(
             cfg,
             Vocabulary.load(d / "vocab.json"),
@@ -138,6 +143,7 @@ class CategorySuggester:
             CategoryGraph.load(d / "hierarchy.json"),
             items,
             encoder,
+            ConformalCalibrator.load(conformal_path) if conformal_path.exists() else None,
         )
 
     def save(self, artifacts_dir: str | Path | None = None) -> Path:
@@ -150,6 +156,8 @@ class CategorySuggester:
         if self.head is not None:
             self.head.save(d / "head.npz")
         self.fusion.save(d / "fusion.json")
+        if self.conformal is not None:
+            self.conformal.save(d / "conformal.json")
         self.graph.save(d / "hierarchy.json")
         with (d / "items.jsonl").open("w", encoding="utf-8") as fh:
             for item in self.items:
@@ -231,15 +239,25 @@ class CategorySuggester:
         meta_embs = self.encode_meta([meta_text])
         ctx = self.contexts(emb, [meta_text], meta_embs, [quality["low_quality"]])[0]
         hidden = 0
+        res = self.ranker.score(ctx, use_hierarchy)
         if self.cfg.hide_specific:
             ranked = []
-            for s in self.ranker.rank(ctx, top_k * 3, use_hierarchy):
+            for s in self.ranker.rank(ctx, top_k * 3, use_hierarchy, res):
                 if s["score"] < self.cfg.specific_min_score and specificity_reason(s["category"]):
                     hidden += 1
                 elif len(ranked) < top_k:
                     ranked.append(s)
         else:
-            ranked = self.ranker.rank(ctx, top_k, use_hierarchy)
+            ranked = self.ranker.rank(ctx, top_k, use_hierarchy, res)
+        suggestion_set = None
+        if self.conformal is not None:
+            alpha = self.cfg.conformal_alpha
+            t = self.conformal.threshold(alpha, group_of(ctx.has_meta))
+            size = int((res["final"] >= t).sum())
+            for s in ranked:
+                s["in_set"] = t > 0 and s["score"] >= t
+            suggestion_set = {"alpha": alpha, "coverage_target": round(1 - alpha, 2), "threshold": round(t, 4),
+                              "size": size, "abstain": size == 0}
         for s in ranked:
             s["evidence"] = self.evidence(ctx, s["cat_id"])
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
@@ -258,6 +276,14 @@ class CategorySuggester:
         elif confidence < self.cfg.unsure_threshold:
             notes.append(f"The content type is clear, but the specific categories below are low-confidence "
                          f"(best {confidence:.0%}). Adding a title usually helps.")
+        if suggestion_set is not None:
+            target = f"{suggestion_set['coverage_target']:.0%}"
+            if suggestion_set["abstain"]:
+                notes.append(f"No category reaches the calibrated threshold ({suggestion_set['threshold']:.0%}): "
+                             f"manual categorisation recommended.")
+            elif suggestion_set["threshold"] > 0:
+                notes.append(f"Suggestion set: the top {suggestion_set['size']} categories (marked ✓) contain a "
+                             f"correct one with at least {target} probability (conformal calibration).")
         if hidden:
             notes.append(f"Hid {hidden} very specific categories (dates, people counts, non-Latin names) "
                          f"scoring below {self.cfg.specific_min_score:.0%}.")
@@ -272,6 +298,7 @@ class CategorySuggester:
             "content_type": families,
             "type_label": type_label,
             "suggestions": ranked,
+            "suggestion_set": suggestion_set,
             "quality": quality,
             "notes": notes,
             "timing_ms": {"encode_image": round((t1 - t0) * 1000, 1), "score_rank": round((t2 - t1) * 1000, 1)},

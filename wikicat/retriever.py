@@ -184,6 +184,12 @@ class PrototypeScorer:
     def add(self, prototypes: np.ndarray) -> None:
         self.index.add(prototypes)
 
+    def set_vectors(self, prototypes: np.ndarray) -> None:
+        """Replace every prototype (same order), e.g. after graph smoothing."""
+        index = VectorIndex(prototypes.shape[1], self.index.index_type)
+        index.add(prototypes)
+        self.index = index
+
     def save(self, directory: Path) -> None:
         self.index.save(directory / "prototypes")
 
