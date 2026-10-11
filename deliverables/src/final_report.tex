@@ -108,8 +108,8 @@ with and without metadata. Members are marked \checkmark; an empty set means ``m
 recommended''. $\alpha$ is the smallest value whose median set stays $\leq$10.
 \item \textbf{Content type first:} Object / Living object / Scene / Event / Abstract concept, from a
 classifier on frozen embeddings (939 openly licensed Commons photos, equal share per source category)
-blended with a vote of the suggestions; below 40\% the result is marked \emph{Unsure} with one line
-suggesting human feedback; two types are shown when close.
+blended with a vote of the suggestions; below 50\% the result is marked \emph{Unsure} with one line
+suggesting human feedback; two types are shown when within 5 points.
 \item \textbf{Filters:} maintenance and contest categories are never suggested. The display hides bare
 country names, and over-specific categories (dates, people counts, non-Latin script) unless their score
 is at least 70\%; evaluation scores the model before these display filters.
@@ -302,7 +302,7 @@ living objects. Suggestions are always reviewed by an editor, with the evidence 
 
 \section{Editor Experience}
 Each result starts with a {\color{accent}$\star$} row giving the content type (or two, e.g.\ a fruit
-market is Object + Scene) and, below 40\%, a one-line \emph{Unsure} notice suggesting human feedback; then a broad category
+market is Object + Scene, when within 5 points) and, below 50\%, a one-line \emph{Unsure} notice suggesting human feedback; then a broad category
 (e.g.\ Automobiles) from a zero-shot match against about a hundred broad Commons categories. Suggestions follow with
 their score; rows marked \checkmark\ form the conformal set, and notes explain abstention, a missing title
 or a low-quality image. Each suggestion shows the indexed images that voted for it; editors can accept,

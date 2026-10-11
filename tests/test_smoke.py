@@ -60,10 +60,11 @@ def test_predict_returns_ranked_suggestions(built, capsys):
                           "--artifacts-dir", cfg.artifacts_dir])
     assert len(out["content_type"]) == 5 and out["type_label"]
     assert len(out["broad"]) == 3 and out["broad"][0]["score"] >= out["broad"][1]["score"]
-    if out["unsure"]:
-        assert "+" not in out["type_label"]  # a single best guess when unsure
+    ct = out["content_type"]
+    if "+" in out["type_label"] and out["subject"] != "people":
+        assert ct[0]["score"] - ct[1]["score"] < 0.05  # two types only when nearly tied
     assert all(s["score"] >= 0.7 for s in out["suggestions"] if "festival" in s["category"])  # dated ones hidden
-    assert out["unsure"] == (out["type_confidence"] < 0.4)
+    assert out["unsure"] == (out["type_confidence"] < 0.5)
     scores = [s["score"] for s in out["suggestions"]]
     assert len(scores) == 4 and scores == sorted(scores, reverse=True)
     sset = out["suggestion_set"]

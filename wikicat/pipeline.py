@@ -285,11 +285,9 @@ class CategorySuggester:
         families = self.family_scorer.score(emb[0], [(s["category"], s["score"]) for s in ranked])
         families, subject = adjust_for_subject(families, self.family_scorer.subject(emb[0]))
         broad = self.broad_scorer.top(emb[0])
-        # Two types this close (e.g. a fruit market: Object and Scene) are both shown, unless the type is
-        # uncertain anyway: then a single best guess is clearer.
+        # Two types are both shown only when they are nearly tied (e.g. a fruit market: Object and Scene).
         type_unsure = families[0]["score"] < self.cfg.unsure_threshold if families else True
-        mixed = (not type_unsure and len(families) > 1
-                 and families[1]["score"] >= 0.5 * families[0]["score"])
+        mixed = len(families) > 1 and families[0]["score"] - families[1]["score"] < self.cfg.mixed_type_gap
         type_label = f"{families[0]['family']} + {families[1]['family']}" if mixed else families[0]["family"]
         if subject == "people" and not type_unsure:
             type_label = f"{families[0]['family']} + Living object"  # what the photo shows, with people in it

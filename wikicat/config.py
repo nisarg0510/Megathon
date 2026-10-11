@@ -64,8 +64,9 @@ class Config:
     conformal_alpha: float = 0.3
 
     # Presentation of suggestions
+    mixed_type_gap: float = 0.05  # show two content types ("Object + Scene") when this close
     hide_countries: bool = True  # do not show bare country / continent names (display only; evaluation keeps them)
-    unsure_threshold: float = 0.4  # content-type score below this marks the image "Unsure" (human feedback suggested)
+    unsure_threshold: float = 0.5  # content-type score below this marks the image "Unsure" (human feedback suggested)
     center_focus: float = 0.4  # weight of the central-crop embedding for uploaded images (0 = off)
     center_crop: float = 0.6  # size of the central crop, as a fraction of width and height
     hide_specific: bool = True  # hide dated / people-count / non-Latin categories unless very sure

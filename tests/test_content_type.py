@@ -136,6 +136,6 @@ def test_legacy_living_thing_name_still_loads(tmp_path):
     from wikicat.content_type import image_folder_dataset
     assert image_folder_dataset(tmp_path / "data")[1] == ["Living object", "Living object"]
 
-    (tmp_path / "config.json").write_text(json.dumps({"unsure_threshold": 0.5, "knn_k": 25}))
+    (tmp_path / "config.json").write_text(json.dumps({"unsure_threshold": 0.3, "knn_k": 25}))
     cfg = Config.load(tmp_path / "config.json")
-    assert cfg.unsure_threshold == 0.4 and cfg.knn_k == 25  # display setting follows the code
+    assert cfg.unsure_threshold == 0.5 and cfg.knn_k == 25  # display setting follows the code

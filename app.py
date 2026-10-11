@@ -233,7 +233,7 @@ def main() -> None:
     parser.add_argument("--center-focus", type=float, default=None,
                         help="Weight of the central crop, 0-1 (default 0.4; 0 = whole image only)")
     parser.add_argument("--unsure-threshold", type=float, default=None,
-                        help="Mark the image Unsure when the content-type score is below this (default 0.4)")
+                        help="Mark the image Unsure when the content-type score is below this (default 0.5)")
     parser.add_argument("--alpha", dest="conformal_alpha", type=float, default=None,
                         help="Suggestion set error rate: the set holds a correct category with probability >= 1 - alpha")
     args = parser.parse_args()
