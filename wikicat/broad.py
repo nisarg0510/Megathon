@@ -12,7 +12,7 @@ import numpy as np
 
 BROAD_CATEGORIES = (
     # people and living things
-    "Portraits", "Groups of people", "Children", "Crowds", "Animals", "Dogs", "Cats", "Birds", "Horses", "Cattle",
+    "Selfies", "Group selfies", "Portraits", "Groups of people", "Children", "Crowds", "Animals", "Dogs", "Cats", "Birds", "Horses", "Cattle",
     "Insects", "Butterflies", "Fish", "Reptiles", "Plants", "Flowers", "Trees", "Mushrooms",
     # objects
     "Automobiles", "Buses", "Trucks", "Motorcycles", "Bicycles", "Trains", "Aircraft", "Ships", "Boats", "Food",

@@ -24,7 +24,7 @@ TYPE_SEEDS = {
     "Living object": ["Cats", "Dogs", "Birds", "Insects", "Flowers", "Trees", "Mushrooms", "Horses", "Fish",
                      "Reptiles", "Butterflies", "Cattle", "Portrait photographs", "Smiling people",
                      "Group photographs", "Portrait photographs of men", "Portrait photographs of women",
-                     "Cartes de visite", "Selfies"],
+                     "Cartes de visite", "Selfies", "Group selfies"],
     "Scene": ["Landscapes", "Streets", "Beaches", "Mountains", "Cityscapes", "Forests", "Rivers", "Interiors",
               "Deserts", "Skylines", "Waterfalls", "Lakes", "Parks", "Markets", "Churches", "Bridges"],
     "Event": ["Festivals", "Protests", "Parades", "Concerts", "Weddings", "Association football matches",

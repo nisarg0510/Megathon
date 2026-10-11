@@ -287,8 +287,9 @@ Object + Scene), hiding dated and non-Latin categories, filtering ``Wiki Loves''
 de-duplicating repeated reports. The last round (a car labelled ``Mini automobiles in Germany'', a football
 photo labelled with a photographer's collection) added a broad-category row and hides collections,
 container categories (``X by Y''), counts and country-level variants unless the title names the country.
-A single person was matched to ``Holi'' because most people photos in our index come from that festival;
-fixing this needs more varied training data.
+A single person was matched to ``Holi'' because most people photos in our index came from that festival.
+After evaluation, about 500 openly licensed portraits, selfies and group photos were added to the demo
+index without retraining (continual learning); all reported numbers predate this.
 
 \section{Responsible Use and Licensing}
 Only openly licensed Commons files are used for training and indexing, and each keeps its licence.
@@ -316,10 +317,8 @@ nothing blocks or changes an upload. New categories, new images and editor decis
 immediately; the fusion model and conformal thresholds are refitted periodically on recent uploads.
 
 \section{Reproducibility}
-Every number in this report comes from the repository's scripts (\texttt{prepare\_data.py},
-\texttt{train.py}, \texttt{evaluate.py}, \texttt{train\_content\_type.py}) with a fixed seed; the README
-lists the commands and links to the built artifacts. All code is MIT-licensed; third-party models,
-libraries and data are credited in the README.
+Every number comes from the repository's scripts with a fixed seed; the README lists the commands, the
+artifact links and all third-party credits. The code is MIT-licensed.
 
 \section{Limitations and Future Work}
 Only 36\% of test labels (2\% for the newest uploads) are reachable, so the first step is indexing the
