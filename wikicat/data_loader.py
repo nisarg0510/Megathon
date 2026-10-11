@@ -286,29 +286,44 @@ class CommonsClient:
         records: dict[str, dict] = {}
         per_user: Counter = Counter()
         for start in starts:
-            params = {
-                "generator": "allimages",
-                "gaisort": "timestamp",
-                "gaidir": "older",
-                "gaistart": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "gailimit": 50,
-                "prop": "imageinfo|categories",
-                "iiprop": "url|timestamp|user|size|mime|extmetadata",
-                "iiurlwidth": thumb_width,
-                "iiextmetadatafilter": "ImageDescription|DateTimeOriginal",
-                "iiextmetadatalanguage": "en",
-                "clshow": "!hidden",
-                "cllimit": "max",
-            }
-            pages: dict[int, dict] = {}
+            # 1. List uploads (no thumbnails: Commons cannot thumbnail some PDFs, which fails the whole
+            #    request), keeping raster images and respecting the per-uploader cap.
+            listed: list[str] = []
+            params = {"list": "allimages", "aisort": "timestamp", "aidir": "older",
+                      "aistart": start.strftime("%Y-%m-%dT%H:%M:%SZ"), "ailimit": 100, "aiprop": "mime|user"}
+            seen_users: Counter = Counter()
             for data in self.query(params):
-                for page in data.get("query", {}).get("pages", []):
-                    merged = pages.setdefault(page["pageid"], {"title": page["title"], "categories": []})
-                    if page.get("imageinfo"):
-                        merged["imageinfo"] = page["imageinfo"][0]
-                    merged["categories"].extend(c["title"] for c in page.get("categories", []))
-                if len(pages) >= per_point * 4 and "clcontinue" not in data.get("continue", {}):
+                for item in data.get("query", {}).get("allimages", []):
+                    user = item.get("user", "")
+                    if item.get("mime") in RASTER_MIMES and per_user[user] + seen_users[user] < per_uploader:
+                        seen_users[user] += 1
+                        listed.append(item["title"])
+                if len(listed) >= per_point * 3:
                     break
+            # 2. Thumbnails and visible categories for the listed files.
+            pages: dict[int, dict] = {}
+            for batch_start in range(0, len(listed), 50):
+                params = {
+                    "titles": "|".join(listed[batch_start:batch_start + 50]),
+                    "prop": "imageinfo|categories",
+                    "iiprop": "url|timestamp|user|size|mime|extmetadata",
+                    "iiurlwidth": thumb_width,
+                    "iiextmetadatafilter": "ImageDescription|DateTimeOriginal",
+                    "iiextmetadatalanguage": "en",
+                    "clshow": "!hidden",
+                    "cllimit": "max",
+                }
+                try:
+                    for data in self.query(params):
+                        for page in data.get("query", {}).get("pages", []):
+                            if "pageid" not in page:
+                                continue
+                            merged = pages.setdefault(page["pageid"], {"title": page["title"], "categories": []})
+                            if page.get("imageinfo"):
+                                merged["imageinfo"] = page["imageinfo"][0]
+                            merged["categories"].extend(c["title"] for c in page.get("categories", []))
+                except RuntimeError as exc:  # one unusual file must not stop the sample
+                    log.warning("Skipping a batch of recent uploads: %s", exc)
             taken = 0
             for pageid, page in pages.items():
                 rec = _page_to_record(pageid, page, seed="recent")

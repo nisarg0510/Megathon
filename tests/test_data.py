@@ -138,20 +138,28 @@ def test_random_files_and_seed_groups(tmp_path):
 def test_recent_files_spreads_over_window_and_caps_uploaders(monkeypatch):
     from wikicat.data_loader import CommonsClient
 
-    calls = []
+    starts = []
 
     def fake_query(self, params):
-        calls.append(params["gaistart"])
-        base = len(calls) * 1000
-        pages = [{"pageid": base + i, "title": f"File:P{base + i}.jpg",
-                  "imageinfo": [{"mime": "image/jpeg", "user": "batchbot" if i < 30 else f"user{i}",
+        if params.get("list") == "allimages":
+            starts.append(params["aistart"])
+            base = len(starts) * 1000
+            items = [{"title": f"File:P{base + i}.jpg", "mime": "image/jpeg",
+                      "user": "batchbot" if i < 30 else f"user{base + i}"} for i in range(40)]
+            items.append({"title": f"File:Doc{base}.pdf", "mime": "application/pdf", "user": "x"})
+            yield {"query": {"allimages": items}}
+            return
+        titles = params["titles"].split("|")
+        assert not any(t.endswith(".pdf") for t in titles)  # PDFs never reach the thumbnail request
+        pages = [{"pageid": int(t[6:-4]), "title": t,
+                  "imageinfo": [{"mime": "image/jpeg", "user": "batchbot" if int(t[6:-4]) % 1000 < 30 else t,
                                  "timestamp": "2026-09-20T10:00:00Z", "url": "u", "thumburl": "t"}],
-                  "categories": [{"title": "Category:Bridges"}]} for i in range(40)]
+                  "categories": [{"title": "Category:Bridges"}]} for t in titles]
         yield {"query": {"pages": pages}}
 
     monkeypatch.setattr(CommonsClient, "query", fake_query)
     client = CommonsClient.__new__(CommonsClient)
     recs = client.recent_files(20, points=4, per_uploader=3)
-    assert len(calls) == 4 and calls == sorted(calls, reverse=True)
+    assert len(starts) == 4 and starts == sorted(starts, reverse=True)
     assert len(recs) == 20 and all(r["seed"] == "recent" for r in recs)
     assert sum(r["uploader"] == "batchbot" for r in recs) == 3
