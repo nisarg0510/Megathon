@@ -190,11 +190,11 @@ class PrototypeScorer:
         index.add(prototypes)
         self.index = index
 
-    def save(self, directory: Path) -> None:
-        self.index.save(directory / "prototypes")
+    def save(self, directory: Path, name: str = "prototypes") -> None:
+        self.index.save(directory / name)
 
     @classmethod
-    def load(cls, directory: Path, index_type: str = "flat") -> "PrototypeScorer":
+    def load(cls, directory: Path, index_type: str = "flat", name: str = "prototypes") -> "PrototypeScorer":
         obj = cls.__new__(cls)
-        obj.index = VectorIndex.load(directory / "prototypes", index_type)
+        obj.index = VectorIndex.load(directory / name, index_type)
         return obj

@@ -36,6 +36,8 @@ FEATURE_NAMES = [
     "lowq_knn",   # low-quality image x knn
     "lowq_txt",   # low-quality image x txt_z
     "lowq_lex",   # low-quality image x lex
+    "proto",      # cosine image . graph-smoothed prototype (text + image centroid)
+    "proto_z",    # same, standardised over this query's top-N
 ]
 
 
@@ -56,6 +58,8 @@ class QueryContext:
     meta_tokens: set[str] = field(default_factory=set)
     meta_years: set[int] = field(default_factory=set)
     low_quality: bool = False
+    sm_ids: np.ndarray = field(default_factory=lambda: np.zeros(0, np.int64))
+    sm_sims: np.ndarray = field(default_factory=lambda: np.zeros(0, np.float32))
 
     @property
     def has_meta(self) -> bool:
@@ -115,9 +119,12 @@ class FusionModel:
     @classmethod
     def load(cls, path: str | Path) -> "FusionModel":
         d = json.loads(Path(path).read_text())
-        if d["feature_names"] != FEATURE_NAMES:
+        names = d["feature_names"]
+        if names != FEATURE_NAMES[:len(names)]:
             raise ValueError("Fusion model was trained with a different feature set; re-run train.py")
-        return cls(d["coef"], d["intercept"], d["mean"], d["scale"], d["feature_names"], d.get("fitted", True))
+        pad = len(FEATURE_NAMES) - len(names)  # older artifacts: features added later get weight 0
+        return cls(np.r_[d["coef"], np.zeros(pad)], d["intercept"], np.r_[d["mean"], np.zeros(pad)],
+                   np.r_[d["scale"], np.ones(pad)], FEATURE_NAMES, d.get("fitted", True))
 
 
 def suppress_ancestors(names: list[str], scores: np.ndarray, graph: CategoryGraph, depth: int = 3,
@@ -150,10 +157,12 @@ def suppress_ancestors(names: list[str], scores: np.ndarray, graph: CategoryGrap
 class Ranker:
     def __init__(self, names: list[str], cat_freq: np.ndarray, prototypes, head, lexical: LexicalScorer,
                  fusion: FusionModel, graph: CategoryGraph, top_n: int = 100, hierarchy_depth: int = 3,
-                 ancestor_ratio: float = 0.5, ancestor_penalty: float = 0.3, hide_countries: bool = False):
+                 ancestor_ratio: float = 0.5, ancestor_penalty: float = 0.3, hide_countries: bool = False,
+                 smoothed=None):
         self.names = names
         self.cat_freq = cat_freq
         self.prototypes = prototypes
+        self.smoothed = smoothed
         self.head = head
         self.lexical = lexical
         self.fusion = fusion
@@ -182,6 +191,7 @@ class Ranker:
         knn_top = sorted(((c, s) for c, s in ctx.knn.items() if s > 0), key=lambda x: -x[1])[:self.top_n]
         cands.update(c for c, _ in knn_top)
         cands.update(ctx.txt_ids[:self.top_n].tolist())
+        cands.update(ctx.sm_ids[:self.top_n].tolist())
         if ctx.head_probs is not None and self.head is not None and len(self.head):
             n = min(self.top_n, len(self.head))
             top = np.argpartition(-ctx.head_probs, n - 1)[:n]
@@ -226,6 +236,12 @@ class Ranker:
         x[:, 12] = lowq * x[:, 0]
         x[:, 13] = lowq * x[:, 3]
         x[:, 14] = lowq * x[:, 8]
+
+        if self.smoothed is not None and len(ctx.sm_sims):
+            sm = self.smoothed.similarity(ctx.img_emb, cands)
+            mu, sd = _stats(ctx.sm_sims)
+            x[:, 15] = sm
+            x[:, 16] = (sm - mu) / sd
         return x
 
     # -- scoring ---------------------------------------------------------------

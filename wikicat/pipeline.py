@@ -4,14 +4,14 @@ Artifacts directory layout (written by train.py):
 
     config.json          run configuration
     vocab.json           category names and training frequencies
-    prototypes.npy       category text prototypes (float16)
+    prototypes.npy       category text prototypes (float16), matched against images and metadata text
+    smoothed_prototypes.npy  graph-smoothed prototypes (text + image centroid), matched against images
     knn_index.npy        indexed image embeddings (float16)
     knn_labels.json      labels / rejected labels / ids of indexed images
     items.jsonl          title and URLs of indexed images (explanations)
     head.npz             supervised head
     fusion.json          fusion weights
     conformal.json       conformal calibration scores (suggestion sets)
-    text_prototypes.npy  category text embeddings before graph smoothing
     hierarchy.json       category parents
     feedback.jsonl       editor accept/reject log (appended at run time)
 """
@@ -83,9 +83,11 @@ class Vocabulary:
 class CategorySuggester:
     def __init__(self, cfg: Config, vocab: Vocabulary, prototypes: PrototypeScorer, knn: KNNScorer,
                  head: LinearHead | None, fusion: FusionModel, graph: CategoryGraph, items: list[dict],
-                 encoder: BaseEncoder | None = None, conformal: ConformalCalibrator | None = None):
+                 encoder: BaseEncoder | None = None, conformal: ConformalCalibrator | None = None,
+                 smoothed: PrototypeScorer | None = None):
         self.cfg = cfg
         self.conformal = conformal
+        self.smoothed = smoothed
         self.vocab = vocab
         self.prototypes = prototypes
         self.knn = knn
@@ -99,7 +101,7 @@ class CategorySuggester:
         self.ranker = Ranker(vocab.names, vocab.freq, prototypes, head, self.lexical, fusion, graph,
                              top_n=cfg.top_n, hierarchy_depth=cfg.hierarchy_depth,
                              ancestor_ratio=cfg.ancestor_ratio, ancestor_penalty=cfg.ancestor_penalty,
-                             hide_countries=cfg.hide_countries)
+                             hide_countries=cfg.hide_countries, smoothed=smoothed)
 
     # -- loading -----------------------------------------------------------------
 
@@ -144,6 +146,8 @@ class CategorySuggester:
             items,
             encoder,
             ConformalCalibrator.load(conformal_path) if conformal_path.exists() else None,
+            PrototypeScorer.load(d, cfg.index_type, "smoothed_prototypes")
+            if (d / "smoothed_prototypes.npy").exists() else None,
         )
 
     def save(self, artifacts_dir: str | Path | None = None) -> Path:
@@ -152,6 +156,8 @@ class CategorySuggester:
         self.cfg.save(d / "config.json")
         self.vocab.save(d / "vocab.json")
         self.prototypes.save(d)
+        if self.smoothed is not None:
+            self.smoothed.save(d, "smoothed_prototypes")
         self.knn.save(d)
         if self.head is not None:
             self.head.save(d / "head.npz")
@@ -187,6 +193,8 @@ class CategorySuggester:
 
         nb_sims, nb_idx = self.knn.search(img_embs, k)
         txt_sims, txt_ids = self.prototypes.top(img_embs, self.cfg.top_n)
+        if self.smoothed is not None:
+            sm_sims, sm_ids = self.smoothed.top(img_embs, self.cfg.top_n)
         head_probs = self.head.predict(img_embs) if self.head is not None and len(self.head) else None
 
         meta_rows = [i for i in range(n) if meta_embs[i] is not None]
@@ -207,6 +215,8 @@ class CategorySuggester:
                 head_probs=head_probs[i] if head_probs is not None else None,
                 low_quality=bool(low_quality[i]),
             )
+            if self.smoothed is not None:
+                ctx.sm_sims, ctx.sm_ids = sm_sims[i], sm_ids[i]
             if meta_embs[i] is not None:
                 ctx.meta_emb = meta_embs[i]
                 ctx.meta_sims, ctx.meta_ids = meta_top[i]
@@ -283,7 +293,8 @@ class CategorySuggester:
                              f"manual categorisation recommended.")
             elif suggestion_set["threshold"] > 0:
                 notes.append(f"Suggestion set: the top {suggestion_set['size']} categories (marked ✓) contain a "
-                             f"correct one with at least {target} probability (conformal calibration).")
+                             f"correct one with at least {target} probability when the image's category is known "
+                             f"(conformal calibration).")
         if hidden:
             notes.append(f"Hid {hidden} very specific categories (dates, people counts, non-Latin names) "
                          f"scoring below {self.cfg.specific_min_score:.0%}.")
@@ -317,7 +328,10 @@ class CategorySuggester:
         names = [normalize_category(n) for n in names]
         new = [n for n in dict.fromkeys(names) if n not in self.vocab]
         if new:
-            self.prototypes.add(self.encoder.encode_categories(new))
+            vectors = self.encoder.encode_categories(new)
+            self.prototypes.add(vectors)
+            if self.smoothed is not None:  # keep ids aligned; a new category has no images yet
+                self.smoothed.add(vectors)
             self.vocab.add(new)
             self.lexical.add(new)
             self._sync()

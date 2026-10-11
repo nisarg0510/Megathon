@@ -4,15 +4,16 @@
 2. Vocabulary = train categories, seed categories and their parents. Val
    categories are not added yet, so validation sees the same share of unknown
    categories that test will (otherwise fusion is tuned on an easy set).
-3. Category prototypes: text embeddings, graph-smoothed with image centroids
-   and parent/sibling prototypes (the blend is chosen on val); k-NN index over
-   train; supervised head on train.
+3. Category prototypes: text embeddings (matched against images and
+   metadata text) plus a second, smoothed set that blends in image centroids
+   and parent/sibling prototypes (blend chosen on val), matched against images
+   only; k-NN index over train; supervised head on train.
 4. Tune k-NN (K, tau) and fit the fusion stacker on val, with copies of val
    that have metadata removed or images degraded, so the stacker learns how
    to weigh signals in those conditions. Then calibrate conformal suggestion
    sets on val.
-5. Add val categories and val images (they predate the test period), recompute
-   the smoothed prototypes with them, and save.
+5. Add val categories and val images (they predate the test period),
+   recompute the smoothed prototypes with them, and save.
 """
 from __future__ import annotations
 
@@ -277,6 +278,12 @@ def calibrate_conformal(suggester: CategorySuggester, val_records: list[dict], v
     names = suggester.vocab.names
     scores: dict[str, list[float]] = {"with_metadata": [], "image_only": []}
     scored = []
+    # Only images with a category the system can output: no set can cover a category it does not know,
+    # and those images need a new category, not a longer list.
+    known = [i for i, g in enumerate(gold) if any(c in suggester.vocab for c in g)]
+    val_embs, texts, gold, lowq = val_embs[known], [texts[i] for i in known], [gold[i] for i in known], \
+        [lowq[i] for i in known]
+    val_meta = [val_meta[i] for i in known]
     for contexts in (suggester.contexts(val_embs, texts, val_meta, lowq),
                      suggester.contexts(val_embs, None, None, lowq)):
         for ctx, g in zip(contexts, gold):
@@ -357,17 +364,18 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
 
     text_protos = encoder.encode_categories(vocab.names)
     train_labels = [vocab.ids(records[i]["categories"]) for i in tr]
-    smoothing_report = None
+    prototypes = PrototypeScorer(text_protos, cfg.index_type)
+    smoothing_report, smoothed = None, None
     if cfg.graph_smoothing:
         if len(va):
             smoothing_report = tune_smoothing(cfg, text_protos, vocab, graph, embs[tr], train_labels, embs[va],
                                               [set(records[i]["categories"]) for i in va])
             log.info("Prototype smoothing: %s", smoothing_report["best"]["setting"])
-        protos = smooth_prototypes(text_protos, vocab.names, graph, embs[tr], train_labels, cfg.smooth_kappa,
-                                   cfg.smooth_gamma, cfg.smooth_use_images)
-    else:
-        protos = text_protos
-    prototypes = PrototypeScorer(protos, cfg.index_type)
+        cfg.graph_smoothing = cfg.smooth_use_images or cfg.smooth_gamma > 0  # "text only" won: nothing to add
+    if cfg.graph_smoothing:
+        smoothed = PrototypeScorer(smooth_prototypes(text_protos, vocab.names, graph, embs[tr], train_labels,
+                                                     cfg.smooth_kappa, cfg.smooth_gamma, cfg.smooth_use_images),
+                                   cfg.index_type)
     knn = KNNScorer(VectorIndex(encoder.dim, cfg.index_type), [], [], [])
     knn.add(embs[tr], train_labels, [records[i]["id"] for i in tr])
     items = [item_meta(records[i]) for i in tr]
@@ -376,11 +384,12 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
     head = None
     if len(head_cats):
         log.info("Training head on %d categories", len(head_cats))
-        head = LinearHead.fit(embs[tr], train_labels, head_cats, text_protos[head_cats],
+        head = LinearHead.fit(embs[tr], train_labels, head_cats, prototypes.vectors[head_cats],
                               epochs=cfg.head_epochs, lr=cfg.head_lr, l2_to_init=cfg.head_l2_to_init,
                               seed=cfg.seed)
 
-    suggester = CategorySuggester(cfg, vocab, prototypes, knn, head, FusionModel.default(), graph, items, encoder)
+    suggester = CategorySuggester(cfg, vocab, prototypes, knn, head, FusionModel.default(), graph, items, encoder,
+                                  smoothed=smoothed)
     report: dict = {
         "model": cfg.model_name,
         "counts": {"train": int(len(tr)), "val": int(len(va)), "test": int(len(te)),
@@ -417,14 +426,12 @@ def train(cfg: Config, encoder: BaseEncoder | None = None) -> dict:
             suggester.add_images(embs[va], [r["categories"] for r in val_records],
                                  [item_meta(r) for r in val_records])
 
-    if cfg.graph_smoothing:
-        # Categories added after fusion got text-only prototypes; smooth everything again
+    if suggester.smoothed is not None:
+        # Categories added after fusion got plain text vectors; smooth everything again
         # with the validation images now in the index.
-        all_text = np.vstack([text_protos, suggester.prototypes.vectors[len(text_protos):]])
-        suggester.prototypes.set_vectors(smooth_prototypes(
-            all_text, suggester.vocab.names, graph, suggester.knn.index.vectors, suggester.knn.labels,
-            cfg.smooth_kappa, cfg.smooth_gamma, cfg.smooth_use_images))
-        np.save(out_dir / "text_prototypes.npy", all_text.astype(np.float16))
+        suggester.smoothed.set_vectors(smooth_prototypes(
+            suggester.prototypes.vectors, suggester.vocab.names, graph, suggester.knn.index.vectors,
+            suggester.knn.labels, cfg.smooth_kappa, cfg.smooth_gamma, cfg.smooth_use_images))
 
     suggester.save(out_dir)
     (out_dir / "excluded_ids.json").write_text(json.dumps(excluded))

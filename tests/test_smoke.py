@@ -28,8 +28,7 @@ def test_train_writes_artifacts(built):
     root, cfg, report = built
     art = root / "artifacts"
     for name in ("config.json", "vocab.json", "prototypes.npy", "knn_index.npy", "knn_labels.json", "items.jsonl",
-                 "head.npz", "fusion.json", "hierarchy.json", "train_report.json", "conformal.json",
-                 "text_prototypes.npy"):
+                 "head.npz", "fusion.json", "hierarchy.json", "train_report.json", "conformal.json"):
         assert (art / name).exists(), name
     assert report["counts"]["train"] > 0 and report["vocabulary"] > 0
     assert len(report["smoothing_tuning"]["grid"]) == 5 and report["conformal"]["alpha"] in (0.1, 0.2, 0.3, 0.4, 0.5)
@@ -48,7 +47,7 @@ def test_evaluate_runs(built):
     assert 0.0 <= res["content_type"]["top1_hit"] <= 1.0
     assert sum(g["images"] for g in res["seed_groups"].values()) == res["n_images"]
     assert (root / "results" / "report_test.md").exists()
-    assert set(res["prototype_smoothing"]) == {"text only", "graph-smoothed"}
+    assert set(res["prototype_smoothing"]) == {"text only", "smoothed"}
     cf = res["conformal"]
     assert all(0 <= v["coverage"] <= 1 and v["mean_size"] >= 0 for v in cf["image only"].values())
     assert set(cf["fixed_top_k"]) == {"@1", "@3", "@5", "@10"}

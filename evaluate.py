@@ -40,6 +40,7 @@ log = logging.getLogger("evaluate")
 ABLATIONS = {
     "k-NN only": ("knn", True),
     "zero-shot only": ("txt", False),
+    "smoothed prototypes only": ("proto", False),
     "head only": ("head", True),
     "metadata text only": ("meta", False),
     "metadata lexical only": ("lex", True),
@@ -54,7 +55,7 @@ def ranked_names(scored: list[dict], names: list[str], max_k: int) -> dict[str, 
         out["fusion"].append([names[cands[i]] for i in np.argsort(-res["prob"])[:max_k]])
         for label, (feat, positive_only) in ABLATIONS.items():
             col = x[:, FEATURE_NAMES.index(feat)] if len(cands) else np.zeros(0)
-            if feat == "meta" and len(cands) and not x[0, FEATURE_NAMES.index("has_meta")]:
+            if (feat == "meta" and len(cands) and not x[0, FEATURE_NAMES.index("has_meta")]) or not col.any():
                 out[label].append([])
                 continue
             order = [i for i in np.argsort(-col) if not positive_only or col[i] > 0][:max_k]
@@ -108,21 +109,24 @@ def markdown_report(res: dict, ks: list[int]) -> str:
     if res.get("prototype_smoothing"):
         ps = res["prototype_smoothing"]
         buckets = list(next(iter(ps.values()))["buckets"])
-        lines += ["", f"## Prototype scorer alone: text vs graph-smoothed prototypes (R@{max(ks)}, micro)", "",
+        lines += ["", f"## Prototype scorer alone: text vs smoothed prototypes (R@{max(ks)}, micro)", "",
                   "| prototypes | all labels | " + " | ".join(buckets) + " |", "|---" * (len(buckets) + 2) + "|"]
         for name, v in ps.items():
             cells = [fmt(v["buckets"][b]["micro_recall"]) for b in buckets]
             lines.append(f"| {name} | {fmt(v['R'])} | " + " | ".join(cells) + " |")
     if res.get("conformal"):
         cf = res["conformal"]
+        known = next(iter(cf["image only"].values()))["in_vocabulary_images"]
         lines += ["", f"## Conformal suggestion sets (default alpha {cf['alpha_default']:g})", "",
-                  "| setting | alpha | target | coverage | mean size | median size | abstention | coverage when answered |",
+                  f"Coverage = a correct category is in the set, over the {fmt(known)} of images that have a category "
+                  "in the vocabulary (the rest need a new category); 'all' counts every image.", "",
+                  "| setting | alpha | target | coverage | coverage (all) | mean size | median size | abstention |",
                   "|---|---|---|---|---|---|---|---|"]
         for setting in ("image + metadata", "image only"):
             for a, v in cf[setting].items():
-                lines.append(f"| {setting} | {a} | {v['target']:.2f} | {fmt(v['coverage'])} | {fmt(v['mean_size'])} | "
-                             f"{fmt(v['median_size'])} | {fmt(v['abstention'])} | {fmt(v['coverage_when_answered'])} |")
-        lines += ["", "Fixed top-k baseline (a correct category in the top k):", "",
+                lines.append(f"| {setting} | {a} | {v['target']:.2f} | {fmt(v['coverage'])} | {fmt(v['coverage_all'])} | "
+                             f"{fmt(v['mean_size'])} | {fmt(v['median_size'])} | {fmt(v['abstention'])} |")
+        lines += ["", "Fixed top-k baseline (a correct category in the top k, in-vocabulary images):", "",
                   "| k | image + metadata | image only |", "|---|---|---|"]
         for k, v in cf["fixed_top_k"].items():
             lines.append(f"| {k} | {fmt(v['image + metadata'])} | {fmt(v['image only'])} |")
@@ -237,11 +241,9 @@ def main(argv=None) -> dict:
     res["frequency_buckets"] = bucket_report(per_category_recall(full, gold, k_mid), freq)
 
     # Graph-smoothed vs plain text prototypes, prototype scorer alone (M1 ablation: tail recall).
-    text_file = Path(args.artifacts_dir) / "text_prototypes.npy"
-    if text_file.exists():
-        text_protos = np.load(text_file).astype(np.float32)
+    if suggester.smoothed is not None:
         res["prototype_smoothing"] = {}
-        for label, protos in (("text only", text_protos), ("graph-smoothed", suggester.prototypes.vectors)):
+        for label, protos in (("text only", suggester.prototypes.vectors), ("smoothed", suggester.smoothed.vectors)):
             preds = prototype_predictions(protos, names, embs, max_k)
             res["prototype_smoothing"][label] = {
                 "R": prf_at_k(preds, gold, max_k)["R"],
@@ -251,10 +253,13 @@ def main(argv=None) -> dict:
         has_meta = [m is not None for m in metas]
         res["conformal"] = {
             "alpha_default": cfg.conformal_alpha,
-            "image + metadata": set_report(suggester.conformal, scored_meta, has_meta, gold, names),
-            "image only": set_report(suggester.conformal, scored_img, [False] * len(gold), gold, names),
-            "fixed_top_k": {f"@{k}": {"image + metadata": topk_hit_rate(scored_meta, gold, names, k),
-                                      "image only": topk_hit_rate(scored_img, gold, names, k)} for k in ks},
+            "image + metadata": set_report(suggester.conformal, scored_meta, has_meta, gold, names,
+                                           vocab=suggester.vocab),
+            "image only": set_report(suggester.conformal, scored_img, [False] * len(gold), gold, names,
+                                     vocab=suggester.vocab),
+            "fixed_top_k": {f"@{k}": {"image + metadata": topk_hit_rate(scored_meta, gold, names, k, suggester.vocab),
+                                      "image only": topk_hit_rate(scored_img, gold, names, k, suggester.vocab)}
+                            for k in ks},
         }
     res["category_types"] = type_report(full, gold, k_mid)
 

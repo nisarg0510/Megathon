@@ -11,6 +11,10 @@ image exchangeable with the calibration images. Confident images get short
 sets, ambiguous ones longer sets, and an empty set is an abstention (manual
 categorisation). Uploads with and without a title/description have different
 score scales, so each group is calibrated separately.
+
+Calibration uses images that have at least one category in the vocabulary:
+for the others no list can be right (they need a new category), so coverage
+is reported both for those "in-vocabulary" images and for all images.
 """
 from __future__ import annotations
 
@@ -73,9 +77,15 @@ class ConformalCalibrator:
         return cls(d["scores"], d.get("alpha", 0.3))
 
 
+def _mean(values) -> float | None:
+    return float(np.mean(values)) if len(values) else None
+
+
 def set_report(cal: ConformalCalibrator, scored: list[dict], has_meta: list[bool], gold: list[set[str]],
-               names: list[str], alphas=ALPHAS) -> dict:
-    """Coverage (a correct category in the set), set size and abstention per alpha."""
+               names: list[str], alphas=ALPHAS, vocab=None) -> dict:
+    """Coverage (a correct category in the set), set size and abstention per alpha.
+    `coverage` is over in-vocabulary images (all images when vocab is None), `coverage_all` over all."""
+    known = [vocab is None or any(c in vocab for c in g) for g in gold]
     out = {}
     for a in alphas:
         covered, sizes, abstain = [], [], []
@@ -84,19 +94,20 @@ def set_report(cal: ConformalCalibrator, scored: list[dict], has_meta: list[bool
             sizes.append(len(idx))
             abstain.append(len(idx) == 0)
             covered.append(any(names[res["cands"][i]] in g for i in idx))
-        answered = [c for c, ab in zip(covered, abstain) if not ab]
         out[f"{a:g}"] = {
             "target": 1 - a,
-            "coverage": float(np.mean(covered)) if covered else None,
-            "mean_size": float(np.mean(sizes)) if sizes else None,
+            "coverage": _mean([c for c, k in zip(covered, known) if k]),
+            "coverage_all": _mean(covered),
+            "mean_size": _mean(sizes),
             "median_size": float(np.median(sizes)) if sizes else None,
-            "abstention": float(np.mean(abstain)) if abstain else None,
-            "coverage_when_answered": float(np.mean(answered)) if answered else None,
+            "abstention": _mean(abstain),
+            "in_vocabulary_images": _mean(known),
         }
     return out
 
 
-def topk_hit_rate(scored: list[dict], gold: list[set[str]], names: list[str], k: int) -> float:
-    """Share of images with a correct category in a fixed top-k (the baseline for conformal sets)."""
-    hits = [any(names[res["cands"][i]] in g for i in np.argsort(-res["final"])[:k]) for res, g in zip(scored, gold)]
-    return float(np.mean(hits)) if hits else 0.0
+def topk_hit_rate(scored: list[dict], gold: list[set[str]], names: list[str], k: int, vocab=None) -> float:
+    """Share of (in-vocabulary) images with a correct category in a fixed top-k: the baseline for conformal sets."""
+    hits = [any(names[res["cands"][i]] in g for i in np.argsort(-res["final"])[:k]) for res, g in zip(scored, gold)
+            if vocab is None or any(c in vocab for c in g)]
+    return _mean(hits) or 0.0
